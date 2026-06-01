@@ -1,0 +1,102 @@
+AUTO_APPLICATION_AGENT_STACK
+
++------------------------------------------------------------------+
+| Layer 1 — discovery                                              |
+| Already solved by JobOps extractors                              |
+| [JobSpy (Indeed/LI)] [Adzuna API] [startup jobs] [SearXNG*]      |
+|                                                *supplements for   |
+|                                                 unlisted career   |
+|                                                 pages             |
+|                                                          ✓ done   |
++------------------------------------------------------------------+
+                              |
+                              v
++------------------------------------------------------------------+
+| Layer 2 — content extraction                                     |
+| Fetch and parse full job posting + application URL + ATS type    |
+| [SCRAPLING] [Camoufox] [ATS fingerprint]                         |
+| detect Greenhouse / Lever / Workday / Taleo / custom             |
+|                                                       moderate    |
++------------------------------------------------------------------+
+                              |
+                              v
++------------------------------------------------------------------+
+| Layer 3 — AI generation                                          |
+| Already partially solved — Ghostwriter + tailoring engine in      |
+| JobOps                                                           |
+| [Cover letter] [Screening answers] [Salary response]             |
+| [PDF attachment]                                                 |
+|                                                          ✓ partial|
++------------------------------------------------------------------+
+                              |
+                              v
++------------------------------------------------------------------+
+| Layer 4 — application execution — the hard layer                 |
+| ATS-specific form drivers + CAPTCHA + document upload            |
+| [Greenhouse driver] [Lever driver] [Workday driver]              |
+| [LinkedIn Easy Apply] [Indeed One-Click Apply]                   |
+| [CAPTCHA solver] [2FA / email verify]  2captcha / CapSolver      |
+| for reCAPTCHA v2/v3, hCaptcha                                    |
+|                                                                hard|
++------------------------------------------------------------------+
+                              |
+                              v
++------------------------------------------------------------------+
+| Layer 5 — tracking and feedback                                  |
+| Write back to JobOps via API — mark applied, store confirmation  |
+| number, trigger Gmail sync                                        |
+|                                                                  easy|
++------------------------------------------------------------------+
+
++------------------------------------------------------------------+
+| Recommended: human review gate between layers 3 and 4            |
+| Show generated answers → one-click approve → then execute.       |
+| Copilot model, not fully autonomous.                              |
++------------------------------------------------------------------+
+
+
+
+JOBOPS_EXTENSION_ARCHITECTURE
+
++------------------------------+        +------------------------------+
+| Your laptop browser          |        | Oracle Cloud — JobOps server |
+|                              |        |                              |
+| +--------------------------+ | GET    | +--------------------------+ |
+| | Job application tab      |<-------->| | New: /api/apply-prep     | |
+| | boards.greenhouse.io /   | | job_id | | endpoint                 | |
+| | lever / workday          | |        | | Receives job_id → returns| |
+| +--------------------------+ |        | | fill payload             | |
+|             |                |        | +--------------------------+ |
+|             v                |        |             |                |
+| +--------------------------+ |        |             v                |
+| | Content script           | |        | +--------------------------+ |
+| | Runs inside the tab —    | |        | | AI generation (existing) | |
+| | full DOM access          | |        | | Ghostwriter answers      | |
+| | Detects ATS · fills      | |        | | screening Qs             | |
+| | fields · dispatches      | |        | | Tailored PDF ready ·     | |
+| | events                   | |        | | cover letter             | |
+| +--------------------------+ |        | +--------------------------+ |
+|             |                |        |             |                |
+|             v                |        |             v                |
+| +--------------------------+ |        | +--------------------------+ |
+| | Background service worker | |        | | Profile + candidate data | |
+| | URL matching · message    | |        | | Name, email, phone,      | |
+| | relay · auth token        | |        | | work history             | |
+| +--------------------------+ |        | +--------------------------+ |
+|             |                |        |             |                |
+|             v                |        |             v                |
+| +--------------------------+ | POST   | +--------------------------+ |
+| | Extension popup          | |confir- | | New: /api/applied        | |
+| | Show pending applications| |mation  | | callback                 | |
+| | · approve · skip         | |------->| | Extension POSTs          | |
+| +--------------------------+ |        | | confirmation → JobOps    | |
+|             |                |        | | marks applied            | |
+|             v                |        | +--------------------------+ |
+| +--------------------------+ |        | +--------------------------+ |
+| | CAPTCHA — user solves    | |        | | ATS type included in     | |
+| | normally                 | |        | | prep payload             | |
+| | No interception needed   | |        | | Extension picks correct   | |
+| +--------------------------+ |        | | fill strategy            | |
+|                              |        | +--------------------------+ |
+| execution — browser handles this      | intelligence — server handles this |
++------------------------------+        +------------------------------+

@@ -1,0 +1,63 @@
+# Dependencies
+**/node_modules
+**/.venv
+**/__pycache__
+
+# Build outputs
+**/dist
+**/*.pyc
+
+# Data (mounted as volume)
+data/
+
+# Environment files (passed via docker-compose)
+.env
+**/.env
+**/.env.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/test/
+**/tests/
+**/__tests__/
+
+# Documentation
+*.md
+!README.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile*
+docker-compose*
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Coverage
+coverage
+.nyc_output

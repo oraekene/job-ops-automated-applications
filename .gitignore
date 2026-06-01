@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+**/node_modules/
+**/.package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+
+# Build outputs
+dist/
+build/
+**/dist/
+**/build/
+docs-site/.docusaurus/
+docs-site/build/
+**/.next/
+**/.turbo/
+**/.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local temp artifacts
+tmp/
+**/tmp/
+
+# Virtual environments
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+
+# Data and runtime artifacts
+data/
+**/data/
+extractors/**/storage/
+*.log
+**/*.log
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
