@@ -1,9 +1,10 @@
 import { notFound } from "@infra/errors";
 import { logger } from "@infra/logger";
-import type { ResumeProfile } from "@shared/types";
+import type { Job, ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
 import { getJobByUrl } from "../repositories/jobs";
 import { getProfile } from "./profile";
+import { scoreJobSuitability } from "./scorer";
 
 export interface PrepProfile {
   first_name: string;
@@ -60,7 +61,9 @@ export const applicationService = {
       };
     }
 
-    const profile = await loadPrepProfile();
+    const fullProfile = await loadProfileOrNull();
+    const profile = fullProfile ? mapProfileToPrepProfile(fullProfile) : null;
+    const suitabilityScore = await resolveSuitabilityScore(job, fullProfile);
 
     return {
       exists: true,
@@ -68,7 +71,7 @@ export const applicationService = {
         id: job.id,
         title: job.title,
         employer: job.employer,
-        suitabilityScore: job.suitabilityScore ?? 0,
+        suitabilityScore,
         status: job.status,
       },
       profile,
@@ -162,16 +165,40 @@ async function findJobByUrl(url: string) {
   return getJobByUrl(normalized);
 }
 
-async function loadPrepProfile(): Promise<PrepProfile | null> {
+async function loadProfileOrNull(): Promise<ResumeProfile | null> {
   try {
-    const profile = await getProfile();
-    return mapProfileToPrepProfile(profile);
+    return await getProfile();
   } catch (error) {
     logger.warn(
       "Skipping profile in prep response: getProfile failed (onboarding likely incomplete)",
       { error },
     );
     return null;
+  }
+}
+
+async function resolveSuitabilityScore(
+  job: Job,
+  profile: ResumeProfile | null,
+): Promise<number> {
+  if (job.suitabilityScore != null) {
+    return job.suitabilityScore;
+  }
+  if (!profile) {
+    return 0;
+  }
+  try {
+    const { score } = await scoreJobSuitability(
+      job,
+      profile as unknown as Record<string, unknown>,
+    );
+    return score;
+  } catch (error) {
+    logger.warn("Suitability scoring failed, defaulting to 0", {
+      jobId: job.id,
+      error,
+    });
+    return 0;
   }
 }
 

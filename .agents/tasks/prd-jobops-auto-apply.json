@@ -291,7 +291,7 @@
     {
       "id": "US-004",
       "title": "prepJob: include suitabilityScore",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-002"
       ],
