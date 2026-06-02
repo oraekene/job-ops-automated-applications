@@ -5,18 +5,18 @@ import { join } from "node:path";
 import { afterEach, describe, it } from "vitest";
 
 describe.sequential("database migrations", () => {
-  let tempDir: string | null = null;
+	let tempDir: string | null = null;
 
-  afterEach(async () => {
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
-      tempDir = null;
-    }
-  });
+	afterEach(async () => {
+		if (tempDir) {
+			await rm(tempDir, { recursive: true, force: true });
+			tempDir = null;
+		}
+	});
 
-  it("boots when an older pipeline_runs table lacks config_snapshot", async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
-    const script = `
+	it("boots when an older pipeline_runs table lacks config_snapshot", async () => {
+		tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
+		const script = `
       import { join } from "node:path";
       import { pathToFileURL } from "node:url";
       import Database from "better-sqlite3";
@@ -46,22 +46,22 @@ describe.sequential("database migrations", () => {
       migratedDb.close();
     `;
 
-    execFileSync(
-      process.execPath,
-      ["--import", "tsx", "--input-type=module", "-e", script],
-      {
-        env: {
-          ...process.env,
-          DATA_DIR: tempDir,
-        },
-        stdio: "pipe",
-      },
-    );
-  });
+		execFileSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module", "-e", script],
+			{
+				env: {
+					...process.env,
+					DATA_DIR: tempDir,
+				},
+				stdio: "pipe",
+			},
+		);
+	});
 
-  it("creates tenant foreign keys for tenant-scoped core tables", async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
-    const script = `
+	it("creates tenant foreign keys for tenant-scoped core tables", async () => {
+		tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
+		const script = `
       import { join } from "node:path";
       import { pathToFileURL } from "node:url";
       import Database from "better-sqlite3";
@@ -86,22 +86,22 @@ describe.sequential("database migrations", () => {
       migratedDb.close();
     `;
 
-    execFileSync(
-      process.execPath,
-      ["--import", "tsx", "--input-type=module", "-e", script],
-      {
-        env: {
-          ...process.env,
-          DATA_DIR: tempDir,
-        },
-        stdio: "pipe",
-      },
-    );
-  });
+		execFileSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module", "-e", script],
+			{
+				env: {
+					...process.env,
+					DATA_DIR: tempDir,
+				},
+				stdio: "pipe",
+			},
+		);
+	});
 
-  it("backfills legacy PDF rows as generated", async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
-    const script = `
+	it("backfills legacy PDF rows as generated", async () => {
+		tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
+		const script = `
       import { join } from "node:path";
       import { pathToFileURL } from "node:url";
       import Database from "better-sqlite3";
@@ -130,22 +130,22 @@ describe.sequential("database migrations", () => {
       migratedDb.close();
     `;
 
-    execFileSync(
-      process.execPath,
-      ["--import", "tsx", "--input-type=module", "-e", script],
-      {
-        env: {
-          ...process.env,
-          DATA_DIR: tempDir,
-        },
-        stdio: "pipe",
-      },
-    );
-  });
+		execFileSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module", "-e", script],
+			{
+				env: {
+					...process.env,
+					DATA_DIR: tempDir,
+				},
+				stdio: "pipe",
+			},
+		);
+	});
 
-  it("adds the tracer-link composite unique index to legacy tables", async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
-    const script = `
+	it("adds the tracer-link composite unique index to legacy tables", async () => {
+		tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
+		const script = `
       import { join } from "node:path";
       import { pathToFileURL } from "node:url";
       import Database from "better-sqlite3";
@@ -209,16 +209,16 @@ describe.sequential("database migrations", () => {
       migratedDb.close();
     `;
 
-    execFileSync(
-      process.execPath,
-      ["--import", "tsx", "--input-type=module", "-e", script],
-      {
-        env: {
-          ...process.env,
-          DATA_DIR: tempDir,
-        },
-        stdio: "pipe",
-      },
-    );
-  });
+		execFileSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module", "-e", script],
+			{
+				env: {
+					...process.env,
+					DATA_DIR: tempDir,
+				},
+				stdio: "pipe",
+			},
+		);
+	});
 });

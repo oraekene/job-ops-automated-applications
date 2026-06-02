@@ -1,214 +1,214 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultReactiveResumeDocument } from "./document";
 import {
-  deleteResume,
-  exportResumePdf,
-  fetchRxResume,
-  getResume,
-  importResume,
-  listResumes,
+	deleteResume,
+	exportResumePdf,
+	fetchRxResume,
+	getResume,
+	importResume,
+	listResumes,
 } from "./v5";
 
 const sampleResume = buildDefaultReactiveResumeDocument();
 (sampleResume.basics as Record<string, unknown>).name = "Imported Resume";
 
 vi.mock("@infra/logger", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: vi.fn(),
-  },
+	logger: {
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		debug: vi.fn(),
+		child: vi.fn(),
+	},
 }));
 
 function jsonResponse(data: unknown, ok = true, status = 200) {
-  return {
-    ok,
-    status,
-    statusText: ok ? "OK" : "Error",
-    headers: {
-      get: (name: string) =>
-        name.toLowerCase() === "content-type" ? "application/json" : null,
-    },
-    json: async () => data,
-    text: async () => JSON.stringify(data),
-  };
+	return {
+		ok,
+		status,
+		statusText: ok ? "OK" : "Error",
+		headers: {
+			get: (name: string) =>
+				name.toLowerCase() === "content-type" ? "application/json" : null,
+		},
+		json: async () => data,
+		text: async () => JSON.stringify(data),
+	};
 }
 
 function pdfResponse(bytes: Uint8Array, ok = true, status = 200) {
-  return {
-    ok,
-    status,
-    statusText: ok ? "OK" : "Error",
-    headers: {
-      get: (name: string) =>
-        name.toLowerCase() === "content-type" ? "application/pdf" : null,
-    },
-    arrayBuffer: async () => bytes.buffer.slice(0),
-    json: async () => {
-      throw new Error("not json");
-    },
-    text: async () => Buffer.from(bytes).toString("latin1"),
-  };
+	return {
+		ok,
+		status,
+		statusText: ok ? "OK" : "Error",
+		headers: {
+			get: (name: string) =>
+				name.toLowerCase() === "content-type" ? "application/pdf" : null,
+		},
+		arrayBuffer: async () => bytes.buffer.slice(0),
+		json: async () => {
+			throw new Error("not json");
+		},
+		text: async () => Buffer.from(bytes).toString("latin1"),
+	};
 }
 
 describe("rxresume v5 endpoints", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  });
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
 
-  it("normalizes base URL and calls /api/openapi", async () => {
-    const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
-    vi.stubGlobal("fetch", mockFetch);
+	it("normalizes base URL and calls /api/openapi", async () => {
+		const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+		vi.stubGlobal("fetch", mockFetch);
 
-    await fetchRxResume(
-      "/resumes",
-      {},
-      {
-        baseUrl: "https://rxresu.me/api",
-        apiKey: "test-key",
-      },
-    );
+		await fetchRxResume(
+			"/resumes",
+			{},
+			{
+				baseUrl: "https://rxresu.me/api",
+				apiKey: "test-key",
+			},
+		);
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      "https://rxresu.me/api/openapi/resumes",
-      expect.objectContaining({
-        headers: expect.objectContaining({ "x-api-key": "test-key" }),
-      }),
-    );
-  });
+		expect(mockFetch).toHaveBeenCalledWith(
+			"https://rxresu.me/api/openapi/resumes",
+			expect.objectContaining({
+				headers: expect.objectContaining({ "x-api-key": "test-key" }),
+			}),
+		);
+	});
 
-  it("uses v5 get/list/import/delete/pdf endpoints", async () => {
-    const mockFetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse([]))
-      .mockResolvedValueOnce(
-        jsonResponse({ id: "resume-123", name: "Resume", slug: "resume" }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ id: "imported-123" }))
-      .mockResolvedValueOnce(jsonResponse({ ok: true }))
-      .mockResolvedValueOnce(pdfResponse(new Uint8Array([37, 80, 68, 70])));
-    vi.stubGlobal("fetch", mockFetch);
+	it("uses v5 get/list/import/delete/pdf endpoints", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse([]))
+			.mockResolvedValueOnce(
+				jsonResponse({ id: "resume-123", name: "Resume", slug: "resume" }),
+			)
+			.mockResolvedValueOnce(jsonResponse({ id: "imported-123" }))
+			.mockResolvedValueOnce(jsonResponse({ ok: true }))
+			.mockResolvedValueOnce(pdfResponse(new Uint8Array([37, 80, 68, 70])));
+		vi.stubGlobal("fetch", mockFetch);
 
-    const config = { baseUrl: "https://rxresu.me", apiKey: "test-key" };
+		const config = { baseUrl: "https://rxresu.me", apiKey: "test-key" };
 
-    await listResumes(config);
-    await getResume("resume-123", config);
-    await importResume({ data: sampleResume, name: "Imported Resume" }, config);
-    await deleteResume("resume-123", config);
-    await expect(exportResumePdf("resume-123", config)).resolves.toEqual({
-      kind: "pdf",
-      bytes: new Uint8Array([37, 80, 68, 70]),
-    });
+		await listResumes(config);
+		await getResume("resume-123", config);
+		await importResume({ data: sampleResume, name: "Imported Resume" }, config);
+		await deleteResume("resume-123", config);
+		await expect(exportResumePdf("resume-123", config)).resolves.toEqual({
+			kind: "pdf",
+			bytes: new Uint8Array([37, 80, 68, 70]),
+		});
 
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      1,
-      "https://rxresu.me/api/openapi/resumes",
-      expect.any(Object),
-    );
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      2,
-      "https://rxresu.me/api/openapi/resumes/resume-123",
-      expect.any(Object),
-    );
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      3,
-      "https://rxresu.me/api/openapi/resumes/import",
-      expect.objectContaining({ method: "POST" }),
-    );
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      4,
-      "https://rxresu.me/api/openapi/resumes/resume-123",
-      expect.objectContaining({
-        method: "DELETE",
-        body: JSON.stringify({}),
-      }),
-    );
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      5,
-      "https://rxresu.me/api/openapi/resumes/resume-123/pdf",
-      expect.any(Object),
-    );
-  });
+		expect(mockFetch).toHaveBeenNthCalledWith(
+			1,
+			"https://rxresu.me/api/openapi/resumes",
+			expect.any(Object),
+		);
+		expect(mockFetch).toHaveBeenNthCalledWith(
+			2,
+			"https://rxresu.me/api/openapi/resumes/resume-123",
+			expect.any(Object),
+		);
+		expect(mockFetch).toHaveBeenNthCalledWith(
+			3,
+			"https://rxresu.me/api/openapi/resumes/import",
+			expect.objectContaining({ method: "POST" }),
+		);
+		expect(mockFetch).toHaveBeenNthCalledWith(
+			4,
+			"https://rxresu.me/api/openapi/resumes/resume-123",
+			expect.objectContaining({
+				method: "DELETE",
+				body: JSON.stringify({}),
+			}),
+		);
+		expect(mockFetch).toHaveBeenNthCalledWith(
+			5,
+			"https://rxresu.me/api/openapi/resumes/resume-123/pdf",
+			expect.any(Object),
+		);
+	});
 
-  it("supports older PDF export responses that return a download URL", async () => {
-    const mockFetch = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse({ url: "https://rxresu.me/storage/resume-123.pdf" }),
-      );
-    vi.stubGlobal("fetch", mockFetch);
+	it("supports older PDF export responses that return a download URL", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				jsonResponse({ url: "https://rxresu.me/storage/resume-123.pdf" }),
+			);
+		vi.stubGlobal("fetch", mockFetch);
 
-    await expect(
-      exportResumePdf("resume-123", {
-        baseUrl: "https://rxresu.me",
-        apiKey: "test-key",
-      }),
-    ).resolves.toEqual({
-      kind: "url",
-      url: "https://rxresu.me/storage/resume-123.pdf",
-    });
-  });
+		await expect(
+			exportResumePdf("resume-123", {
+				baseUrl: "https://rxresu.me",
+				apiKey: "test-key",
+			}),
+		).resolves.toEqual({
+			kind: "url",
+			url: "https://rxresu.me/storage/resume-123.pdf",
+		});
+	});
 
-  it("rejects unexpected PDF export response shapes", async () => {
-    const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
-    vi.stubGlobal("fetch", mockFetch);
+	it("rejects unexpected PDF export response shapes", async () => {
+		const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+		vi.stubGlobal("fetch", mockFetch);
 
-    await expect(
-      exportResumePdf("resume-123", {
-        baseUrl: "https://rxresu.me",
-        apiKey: "test-key",
-      }),
-    ).rejects.toThrow(
-      "Reactive Resume returned an unexpected PDF export response shape.",
-    );
-  });
+		await expect(
+			exportResumePdf("resume-123", {
+				baseUrl: "https://rxresu.me",
+				apiKey: "test-key",
+			}),
+		).rejects.toThrow(
+			"Reactive Resume returned an unexpected PDF export response shape.",
+		);
+	});
 
-  it("preserves current v5 templates during import", async () => {
-    const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ id: "meowth" }));
-    vi.stubGlobal("fetch", mockFetch);
-    const resume = structuredClone(sampleResume);
-    (resume.metadata as Record<string, unknown>).template = "meowth";
+	it("preserves current v5 templates during import", async () => {
+		const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ id: "meowth" }));
+		vi.stubGlobal("fetch", mockFetch);
+		const resume = structuredClone(sampleResume);
+		(resume.metadata as Record<string, unknown>).template = "meowth";
 
-    await importResume(
-      { data: resume, name: "Meowth Resume" },
-      { baseUrl: "https://rxresu.me", apiKey: "test-key" },
-    );
+		await importResume(
+			{ data: resume, name: "Meowth Resume" },
+			{ baseUrl: "https://rxresu.me", apiKey: "test-key" },
+		);
 
-    const body = JSON.parse(String(mockFetch.mock.calls[0][1].body));
-    expect(body.data.metadata.template).toBe("meowth");
-  });
+		const body = JSON.parse(String(mockFetch.mock.calls[0][1].body));
+		expect(body.data.metadata.template).toBe("meowth");
+	});
 
-  it("logs sanitized upstream validation details when a request fails", async () => {
-    const { logger } = await import("@infra/logger");
-    const errorPayload = {
-      formErrors: [],
-      fieldErrors: {
-        picture: ["Invalid input: expected boolean, received undefined"],
-      },
-    };
-    const mockFetch = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(errorPayload, false, 400));
-    vi.stubGlobal("fetch", mockFetch);
+	it("logs sanitized upstream validation details when a request fails", async () => {
+		const { logger } = await import("@infra/logger");
+		const errorPayload = {
+			formErrors: [],
+			fieldErrors: {
+				picture: ["Invalid input: expected boolean, received undefined"],
+			},
+		};
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(jsonResponse(errorPayload, false, 400));
+		vi.stubGlobal("fetch", mockFetch);
 
-    await expect(
-      importResume(
-        { data: sampleResume, name: "Imported Resume" },
-        { baseUrl: "https://rxresu.me", apiKey: "test-key" },
-      ),
-    ).rejects.toThrow("Reactive Resume API error (400)");
+		await expect(
+			importResume(
+				{ data: sampleResume, name: "Imported Resume" },
+				{ baseUrl: "https://rxresu.me", apiKey: "test-key" },
+			),
+		).rejects.toThrow("Reactive Resume API error (400)");
 
-    expect(logger.warn).toHaveBeenCalledWith(
-      "Reactive Resume upstream request failed",
-      expect.objectContaining({
-        endpoint: "/api/openapi/resumes/import",
-        method: "POST",
-        status: 400,
-        upstreamError: errorPayload,
-      }),
-    );
-  });
+		expect(logger.warn).toHaveBeenCalledWith(
+			"Reactive Resume upstream request failed",
+			expect.objectContaining({
+				endpoint: "/api/openapi/resumes/import",
+				method: "POST",
+				status: 400,
+				upstreamError: errorPayload,
+			}),
+		);
+	});
 });

@@ -4,14 +4,14 @@ import { queryKeys } from "@/client/lib/queryKeys";
 import { invalidateJobData } from "./invalidate";
 
 describe("invalidateJobData", () => {
-  it("invalidates in-progress board when invalidating a specific job", async () => {
-    const invalidateQueries = vi.fn().mockResolvedValue(undefined);
-    const queryClient = { invalidateQueries } as unknown as QueryClient;
+	it("invalidates in-progress board when invalidating a specific job", async () => {
+		const invalidateQueries = vi.fn().mockResolvedValue(undefined);
+		const queryClient = { invalidateQueries } as unknown as QueryClient;
 
-    await invalidateJobData(queryClient, "job-1");
+		await invalidateJobData(queryClient, "job-1");
 
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: queryKeys.jobs.inProgressBoard(),
-    });
-  });
+		expect(invalidateQueries).toHaveBeenCalledWith({
+			queryKey: queryKeys.jobs.inProgressBoard(),
+		});
+	});
 });

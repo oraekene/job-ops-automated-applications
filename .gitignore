@@ -46,3 +46,7 @@ extractors/**/storage/
 .vscode/
 .idea/
 *.swp
+
+# Local install/background process markers
+install.pid
+*.pid

@@ -1,53 +1,53 @@
 import type { SettingKey } from "@server/repositories/settings";
 import type { UpdateSettingsInput } from "@shared/settings-schema";
 import type {
-  DeferredSideEffect,
-  SettingsUpdateAction,
-  SettingsUpdateContext,
-  SettingsUpdatePlan,
-  SettingUpdateHandler,
+	DeferredSideEffect,
+	SettingsUpdateAction,
+	SettingsUpdateContext,
+	SettingsUpdatePlan,
+	SettingUpdateHandler,
 } from "./registry";
 import { settingsUpdateRegistry } from "./registry";
 
 async function runAction(action: SettingsUpdateAction): Promise<void> {
-  await action.persist();
-  if (action.sideEffect) {
-    await action.sideEffect();
-  }
+	await action.persist();
+	if (action.sideEffect) {
+		await action.sideEffect();
+	}
 }
 
 export async function applySettingsUpdates(
-  input: UpdateSettingsInput,
+	input: UpdateSettingsInput,
 ): Promise<SettingsUpdatePlan> {
-  const context: SettingsUpdateContext = { input };
-  const actions: SettingsUpdateAction[] = [];
-  const deferredSideEffects = new Set<DeferredSideEffect>();
-  const updatedSettingKeys = new Set<SettingKey>();
+	const context: SettingsUpdateContext = { input };
+	const actions: SettingsUpdateAction[] = [];
+	const deferredSideEffects = new Set<DeferredSideEffect>();
+	const updatedSettingKeys = new Set<SettingKey>();
 
-  const keys = Object.keys(input) as Array<keyof UpdateSettingsInput>;
-  for (const key of keys) {
-    const handler = settingsUpdateRegistry[key] as
-      | SettingUpdateHandler<typeof key>
-      | undefined;
-    if (!handler) continue;
+	const keys = Object.keys(input) as Array<keyof UpdateSettingsInput>;
+	for (const key of keys) {
+		const handler = settingsUpdateRegistry[key] as
+			| SettingUpdateHandler<typeof key>
+			| undefined;
+		if (!handler) continue;
 
-    const result = await handler({ key, value: input[key], context });
-    actions.push(...result.actions);
-    for (const deferred of result.deferredSideEffects) {
-      deferredSideEffects.add(deferred);
-    }
-  }
+		const result = await handler({ key, value: input[key], context });
+		actions.push(...result.actions);
+		for (const deferred of result.deferredSideEffects) {
+			deferredSideEffects.add(deferred);
+		}
+	}
 
-  await Promise.all(actions.map(runAction));
-  for (const action of actions) {
-    updatedSettingKeys.add(action.settingKey);
-  }
+	await Promise.all(actions.map(runAction));
+	for (const action of actions) {
+		updatedSettingKeys.add(action.settingKey);
+	}
 
-  return {
-    shouldRefreshBackupScheduler: deferredSideEffects.has(
-      "refreshBackupScheduler",
-    ),
-    shouldClearRxResumeCaches: deferredSideEffects.has("clearRxResumeCaches"),
-    updatedSettingKeys: Array.from(updatedSettingKeys).sort(),
-  };
+	return {
+		shouldRefreshBackupScheduler: deferredSideEffects.has(
+			"refreshBackupScheduler",
+		),
+		shouldClearRxResumeCaches: deferredSideEffects.has("clearRxResumeCaches"),
+		updatedSettingKeys: Array.from(updatedSettingKeys).sort(),
+	};
 }

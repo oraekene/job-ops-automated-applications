@@ -1,159 +1,159 @@
 import * as api from "@client/api";
 import { createDesignResumePdfObjectUrl } from "@client/lib/private-pdf";
 import type {
-  DesignResumeDocument,
-  PdfRenderer,
-  TypstTheme,
+	DesignResumeDocument,
+	PdfRenderer,
+	TypstTheme,
 } from "@shared/types";
 import { FileText, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type DesignResumePdfPreviewProps = {
-  draft: DesignResumeDocument;
-  pdfRenderer: PdfRenderer;
-  typstTheme: TypstTheme;
-  isUpdatingRenderer: boolean;
-  isDirty: boolean;
-  saveState: "idle" | "saving" | "saved" | "error";
+	draft: DesignResumeDocument;
+	pdfRenderer: PdfRenderer;
+	typstTheme: TypstTheme;
+	isUpdatingRenderer: boolean;
+	isDirty: boolean;
+	saveState: "idle" | "saving" | "saved" | "error";
 };
 
 type PreviewState = "idle" | "waiting-for-save" | "loading" | "ready" | "error";
 
 export function DesignResumePdfPreview({
-  draft,
-  pdfRenderer,
-  typstTheme,
-  isUpdatingRenderer,
-  isDirty,
-  saveState,
+	draft,
+	pdfRenderer,
+	typstTheme,
+	isUpdatingRenderer,
+	isDirty,
+	saveState,
 }: DesignResumePdfPreviewProps) {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [previewState, setPreviewState] = useState<PreviewState>("idle");
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isFrameLoading, setIsFrameLoading] = useState(false);
-  const requestSequence = useRef(0);
-  const lastLoadedKey = useRef<string | null>(null);
-  const pdfObjectUrlRef = useRef<string | null>(null);
+	const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+	const [previewState, setPreviewState] = useState<PreviewState>("idle");
+	const [previewError, setPreviewError] = useState<string | null>(null);
+	const [isFrameLoading, setIsFrameLoading] = useState(false);
+	const requestSequence = useRef(0);
+	const lastLoadedKey = useRef<string | null>(null);
+	const pdfObjectUrlRef = useRef<string | null>(null);
 
-  const revisionKey = useMemo(
-    () => `${draft.id}:${draft.revision}:${pdfRenderer}:${typstTheme}`,
-    [draft.id, draft.revision, pdfRenderer, typstTheme],
-  );
+	const revisionKey = useMemo(
+		() => `${draft.id}:${draft.revision}:${pdfRenderer}:${typstTheme}`,
+		[draft.id, draft.revision, pdfRenderer, typstTheme],
+	);
 
-  useEffect(() => {
-    if (saveState === "error") {
-      setIsFrameLoading(false);
-      setPreviewState((current) =>
-        current === "waiting-for-save" ? "error" : current,
-      );
-      setPreviewError("Changes could not be saved. Please try again.");
-      return;
-    }
+	useEffect(() => {
+		if (saveState === "error") {
+			setIsFrameLoading(false);
+			setPreviewState((current) =>
+				current === "waiting-for-save" ? "error" : current,
+			);
+			setPreviewError("Changes could not be saved. Please try again.");
+			return;
+		}
 
-    if (isUpdatingRenderer || isDirty || saveState === "saving") {
-      setPreviewState("waiting-for-save");
-      setIsFrameLoading(false);
-      return;
-    }
+		if (isUpdatingRenderer || isDirty || saveState === "saving") {
+			setPreviewState("waiting-for-save");
+			setIsFrameLoading(false);
+			return;
+		}
 
-    if (lastLoadedKey.current === revisionKey) {
-      return;
-    }
+		if (lastLoadedKey.current === revisionKey) {
+			return;
+		}
 
-    const requestId = ++requestSequence.current;
-    lastLoadedKey.current = revisionKey;
-    setPreviewState("loading");
-    setPreviewError(null);
-    setIsFrameLoading(true);
+		const requestId = ++requestSequence.current;
+		lastLoadedKey.current = revisionKey;
+		setPreviewState("loading");
+		setPreviewError(null);
+		setIsFrameLoading(true);
 
-    void api
-      .generateDesignResumePdf()
-      .then(async (generated) =>
-        createDesignResumePdfObjectUrl(generated.pdfUrl),
-      )
-      .then((objectUrl) => {
-        if (requestSequence.current !== requestId) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        if (pdfObjectUrlRef.current) {
-          URL.revokeObjectURL(pdfObjectUrlRef.current);
-        }
-        pdfObjectUrlRef.current = objectUrl;
-        setPdfUrl(`${objectUrl}#toolbar=0&navpanes=0&view=FitH`);
-        setPreviewState("ready");
-      })
-      .catch((error: unknown) => {
-        if (requestSequence.current !== requestId) return;
-        lastLoadedKey.current = null;
-        setPreviewError(
-          error instanceof Error
-            ? error.message
-            : "Could not render the PDF preview.",
-        );
-        setPreviewState("error");
-        setIsFrameLoading(false);
-      });
-  }, [isDirty, isUpdatingRenderer, revisionKey, saveState]);
+		void api
+			.generateDesignResumePdf()
+			.then(async (generated) =>
+				createDesignResumePdfObjectUrl(generated.pdfUrl),
+			)
+			.then((objectUrl) => {
+				if (requestSequence.current !== requestId) {
+					URL.revokeObjectURL(objectUrl);
+					return;
+				}
+				if (pdfObjectUrlRef.current) {
+					URL.revokeObjectURL(pdfObjectUrlRef.current);
+				}
+				pdfObjectUrlRef.current = objectUrl;
+				setPdfUrl(`${objectUrl}#toolbar=0&navpanes=0&view=FitH`);
+				setPreviewState("ready");
+			})
+			.catch((error: unknown) => {
+				if (requestSequence.current !== requestId) return;
+				lastLoadedKey.current = null;
+				setPreviewError(
+					error instanceof Error
+						? error.message
+						: "Could not render the PDF preview.",
+				);
+				setPreviewState("error");
+				setIsFrameLoading(false);
+			});
+	}, [isDirty, isUpdatingRenderer, revisionKey, saveState]);
 
-  useEffect(() => {
-    return () => {
-      if (pdfObjectUrlRef.current) {
-        URL.revokeObjectURL(pdfObjectUrlRef.current);
-      }
-    };
-  }, []);
+	useEffect(() => {
+		return () => {
+			if (pdfObjectUrlRef.current) {
+				URL.revokeObjectURL(pdfObjectUrlRef.current);
+			}
+		};
+	}, []);
 
-  const showLoader =
-    previewState === "loading" ||
-    previewState === "waiting-for-save" ||
-    isFrameLoading;
+	const showLoader =
+		previewState === "loading" ||
+		previewState === "waiting-for-save" ||
+		isFrameLoading;
 
-  return (
-    <div className="relative flex h-full min-h-0 items-center justify-center overflow-hidden bg-card">
-      <div className="relative h-full min-h-0 w-full overflow-hidden border border-border/70 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-        {pdfUrl ? (
-          <iframe
-            key={pdfUrl}
-            src={pdfUrl}
-            title="Resume Studio PDF preview"
-            className="h-full w-full"
-            onLoad={() => {
-              setIsFrameLoading(false);
-              setPreviewState("ready");
-            }}
-          />
-        ) : null}
+	return (
+		<div className="relative flex h-full min-h-0 items-center justify-center overflow-hidden bg-card">
+			<div className="relative h-full min-h-0 w-full overflow-hidden border border-border/70 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
+				{pdfUrl ? (
+					<iframe
+						key={pdfUrl}
+						src={pdfUrl}
+						title="Resume Studio PDF preview"
+						className="h-full w-full"
+						onLoad={() => {
+							setIsFrameLoading(false);
+							setPreviewState("ready");
+						}}
+					/>
+				) : null}
 
-        {showLoader ? (
-          <div className="absolute inset-0 grid place-items-center bg-card backdrop-blur-[2px]">
-            <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-border/70 bg-card px-6 py-5 text-center shadow-lg">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <div className="text-sm font-medium text-foreground">
-                {isUpdatingRenderer
-                  ? "Updating template before refreshing the preview"
-                  : previewState === "waiting-for-save"
-                    ? "Saving changes before updating the preview"
-                    : "Rendering PDF preview"}
-              </div>
-            </div>
-          </div>
-        ) : null}
+				{showLoader ? (
+					<div className="absolute inset-0 grid place-items-center bg-card backdrop-blur-[2px]">
+						<div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-border/70 bg-card px-6 py-5 text-center shadow-lg">
+							<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+							<div className="text-sm font-medium text-foreground">
+								{isUpdatingRenderer
+									? "Updating template before refreshing the preview"
+									: previewState === "waiting-for-save"
+										? "Saving changes before updating the preview"
+										: "Rendering PDF preview"}
+							</div>
+						</div>
+					</div>
+				) : null}
 
-        {previewState === "error" ? (
-          <div className="absolute inset-0 grid place-items-center bg-card backdrop-blur-[2px]">
-            <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-6 py-5 text-center">
-              <FileText className="h-6 w-6 text-rose-300" />
-              <div className="text-sm font-medium text-rose-200">
-                Preview unavailable
-              </div>
-              <div className="text-xs leading-6 text-rose-200/80">
-                {previewError ?? "Could not render the PDF preview."}
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
+				{previewState === "error" ? (
+					<div className="absolute inset-0 grid place-items-center bg-card backdrop-blur-[2px]">
+						<div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-6 py-5 text-center">
+							<FileText className="h-6 w-6 text-rose-300" />
+							<div className="text-sm font-medium text-rose-200">
+								Preview unavailable
+							</div>
+							<div className="text-xs leading-6 text-rose-200/80">
+								{previewError ?? "Could not render the PDF preview."}
+							</div>
+						</div>
+					</div>
+				) : null}
+			</div>
+		</div>
+	);
 }

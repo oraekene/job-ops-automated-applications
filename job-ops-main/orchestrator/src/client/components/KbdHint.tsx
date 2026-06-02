@@ -3,10 +3,10 @@ import { useModifierPressed } from "@client/hooks/useModifierPressed";
 import type React from "react";
 
 interface KbdHintProps {
-  /** The key to display, e.g. "s", "Cmd+K", "?" */
-  shortcut: string;
-  /** Additional className */
-  className?: string;
+	/** The key to display, e.g. "s", "Cmd+K", "?" */
+	shortcut: string;
+	/** Additional className */
+	className?: string;
 }
 
 /**
@@ -17,16 +17,16 @@ interface KbdHintProps {
  * key is held down.
  */
 export const KbdHint: React.FC<KbdHintProps> = ({ shortcut, className }) => {
-  const hasKeyboard = useKeyboardAvailability();
-  const isControlPressed = useModifierPressed("Control");
+	const hasKeyboard = useKeyboardAvailability();
+	const isControlPressed = useModifierPressed("Control");
 
-  if (!hasKeyboard || !isControlPressed) return null;
+	if (!hasKeyboard || !isControlPressed) return null;
 
-  return (
-    <kbd
-      className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded border border-border/60 bg-muted/40 text-[10px] font-mono font-medium text-muted-foreground leading-none ${className ?? ""}`}
-    >
-      {shortcut}
-    </kbd>
-  );
+	return (
+		<kbd
+			className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded border border-border/60 bg-muted/40 text-[10px] font-mono font-medium text-muted-foreground leading-none ${className ?? ""}`}
+		>
+			{shortcut}
+		</kbd>
+	);
 };

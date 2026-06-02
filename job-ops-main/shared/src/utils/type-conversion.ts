@@ -13,14 +13,14 @@
  * - Returns null for other types (objects, arrays, etc.)
  */
 export function toStringOrNull(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-  if (typeof value === "number" || typeof value === "boolean")
-    return String(value);
-  return null;
+	if (value === null || value === undefined) return null;
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		return trimmed.length > 0 ? trimmed : null;
+	}
+	if (typeof value === "number" || typeof value === "boolean")
+		return String(value);
+	return null;
 }
 
 /**
@@ -31,13 +31,13 @@ export function toStringOrNull(value: unknown): string | null {
  * - Returns null for other types (booleans, objects, arrays, etc.)
  */
 export function toNumberOrNull(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
+	if (value === null || value === undefined) return null;
+	if (typeof value === "number") return Number.isFinite(value) ? value : null;
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		if (!trimmed) return null;
+		const parsed = Number(trimmed);
+		return Number.isFinite(parsed) ? parsed : null;
+	}
+	return null;
 }

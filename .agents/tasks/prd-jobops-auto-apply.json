@@ -77,15 +77,84 @@
   ],
   "stories": [
     {
-      "id": "US-001",
-      "title": "Verify current orchestrator + extension build state",
+      "id": "US-023",
+      "title": "Define JobDocument type in shared package",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The `JobDocument` type is imported by `shared/src/ghostwriter-document-context.ts:5` and `shared/src/job-document-classification.ts:1` but is never defined in the shared package. Add it so these files typecheck.",
+      "acceptanceCriteria": [
+        "`shared/src/types/jobs.ts` exports an `interface JobDocument` with at minimum `{ id: string; fileName: string; mediaType: string | null; byteSize: number; createdAt: string }`",
+        "`shared/src/types/index.ts` re-exports `JobDocument` (or the type is reachable through `./jobs` which `index.ts` already re-exports)",
+        "`npm --workspace shared run check:types` reports 0 errors related to JobDocument",
+        "Example: `import type { JobDocument } from '@shared/types'` resolves without `TS2305`",
+        "Negative case: removing the new export reintroduces the 2 original TS2305 errors in `ghostwriter-document-context.ts` and `job-document-classification.ts`"
+      ]
+    },
+    {
+      "id": "US-024",
+      "title": "Fix autoApplicationEnabled.parse dead-true branch",
+      "status": "done",
+      "dependsOn": [],
+      "description": "`shared/src/settings-registry.ts:729` has `parse: (v: string | undefined): boolean => v === \"true\" || v === true`. The `v === true` branch is unreachable (v is `string | undefined`) and TS2367 flags it. Remove the dead branch.",
+      "acceptanceCriteria": [
+        "`autoApplicationEnabled.parse` body becomes `v === \"true\"` (no `|| v === true`)",
+        "`npm --workspace shared run check:types` reports 0 errors related to autoApplicationEnabled",
+        "Example: `parse(\"true\")` returns `true`, `parse(\"false\")` returns `false`, `parse(undefined)` returns `false`",
+        "Negative case: restoring the `|| v === true` branch reintroduces the TS2367 error"
+      ]
+    },
+    {
+      "id": "US-025",
+      "title": "Add typstTheme, llmPurposeApiKeys, llmPurposeOverrides to settings-registry",
+      "status": "done",
+      "dependsOn": [],
+      "description": "Orchestrator code in `services/pdf.ts`, `services/pdf-fingerprint.ts`, `services/auto-pdf-regeneration.ts`, `services/settings.ts`, `services/modelSelection.ts`, `services/modelSelection.test.ts`, and `services/settings-update/registry.ts` references three settings that don't exist in the shared settings-registry: `typstTheme`, `llmPurposeApiKeys`, `llmPurposeOverrides`. Add them with the types the consumers expect.",
+      "acceptanceCriteria": [
+        "`shared/src/settings-registry.ts` adds three new entries in the `// --- Auto-Application ---` section (or an appropriate section): `typstTheme` (string, default `null`/empty), `llmPurposeApiKeys` (JSON-stringified `Partial<Record<string, string>>`, default `{}`), `llmPurposeOverrides` (JSON-stringified `Partial<Record<string, string>>`, default `{}`)",
+        "Each new setting has `kind: \"typed\"`, `envKey`, `schema` (Zod), `default`, `parse`, and `serialize` matching the pattern of nearby settings",
+        "`npm --workspace orchestrator run check:types` reports 0 errors related to these three settings (the 12+ TS2339/TS2345 errors in the listed files disappear)",
+        "Example: `SETTINGS_REGISTRY.typstTheme.parse(undefined)` returns the default value",
+        "Negative case: removing any one of the three settings reintroduces the corresponding orchestrator type errors"
+      ]
+    },
+    {
+      "id": "US-026",
+      "title": "Apply biome format --write to fix auto-fixable line-ending and format errors",
       "status": "open",
       "dependsOn": [],
-      "description": "As a developer, I want to confirm the repo is in a known-good state before I start changing code, so that any failures in later stories are attributable to the new code and not the baseline.",
+      "description": "The baseline biome ci run reported 871 errors, the vast majority being CRLF↔LF line-ending mismatches and import-sort issues. Run `biome format . --write` and `biome check --write` to auto-fix the safe ones.",
       "acceptanceCriteria": [
-        "All 9 quality gates pass on the current `main` branch with no code changes",
-        "Example: `./orchestrator/node_modules/.bin/biome ci .` reports 0 errors",
-        "Negative case: if any gate fails, US-001 is incomplete — the developer must fix the baseline or document the failure as a precondition for the rest of the PRD"
+        "`biome format . --write` and `biome check --write` (or `biome ci . --write` if supported) have been run from `job-ops-main/`",
+        "The 871-error baseline drops to a small, finite set of remaining issues that require manual fixes (e.g. a11y/noLabelWithoutControl, import sort in `vite.config.ts`)",
+        "No source file in `orchestrator/`, `shared/`, `extractors/`, or `packages/extension/` is intentionally reverted to an unformatted state",
+        "Example: `biome ci .` reports a small count of remaining errors (≤ 20), all categorized as fixable or manual-only",
+        "Negative case: skipping this story causes the next gate (`biome ci .`) to keep reporting 800+ errors"
+      ]
+    },
+    {
+      "id": "US-027",
+      "title": "Fix remaining biome a11y and import-sort errors manually",
+      "status": "open",
+      "dependsOn": ["US-026"],
+      "description": "After US-026 runs biome's auto-fix, a small number of errors remain that require manual code changes: `lint/a11y/noLabelWithoutControl` in `packages/extension/src/popup/index.tsx:20` (label missing `htmlFor` or input not nested) and `assist/source/organizeImports` in `packages/extension/vite.config.ts:1`. Fix them by hand.",
+      "acceptanceCriteria": [
+        "`packages/extension/src/popup/index.tsx:20` is fixed: the `<label>` either has an `htmlFor` matching the related input's `id`, or the input is moved inside the label",
+        "`packages/extension/vite.config.ts:1` imports are sorted in the order biome expects (alphabetical by module specifier within import groups)",
+        "`biome ci .` from `job-ops-main/` reports 0 errors and 0 warnings",
+        "Example: `biome ci .` exits with code 0 and prints `Found 0 errors`",
+        "Negative case: reverting either manual fix reintroduces the corresponding biome error"
+      ]
+    },
+    {
+      "id": "US-001",
+      "title": "Verify baseline is green after fixes",
+      "status": "open",
+      "dependsOn": ["US-023", "US-024", "US-025", "US-026", "US-027"],
+      "description": "As a developer, I want to confirm the repo is in a known-good state before I start changing code, so that any failures in later stories are attributable to the new code and not the baseline. This story runs after the 5 baseline-fix stories above.",
+      "acceptanceCriteria": [
+        "All 9 quality gates pass on the current `main` branch with no code changes (other than the baseline fixes from US-023..US-027)",
+        "Example: `biome ci .` reports 0 errors, `npm run check:types:shared` exits 0, `npm --workspace orchestrator run check:types` exits 0, all extractor typechecks exit 0, `npm --workspace orchestrator run build:client` exits 0, `npm --workspace orchestrator run test:run` exits 0, extension `check:types` and `test` exit 0",
+        "Negative case: if any gate fails, US-001 is incomplete — fix the regression or document it as a precondition for the rest of the PRD"
       ]
     },
     {

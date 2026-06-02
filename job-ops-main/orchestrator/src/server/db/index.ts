@@ -15,7 +15,7 @@ const DB_PATH = join(getDataDir(), "jobs.db");
 // Ensure data directory exists
 const dataDir = dirname(DB_PATH);
 if (!existsSync(dataDir)) {
-  mkdirSync(dataDir, { recursive: true });
+	mkdirSync(dataDir, { recursive: true });
 }
 
 const sqlite = new Database(DB_PATH);
@@ -27,7 +27,7 @@ export const db = drizzle(sqlite, { schema });
 export { schema };
 
 export function closeDb() {
-  if (isClosed) return;
-  sqlite.close();
-  isClosed = true;
+	if (isClosed) return;
+	sqlite.close();
+	isClosed = true;
 }

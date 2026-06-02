@@ -26,100 +26,100 @@ Rules:
 `.trim();
 
 const stringList = (description: string, maxItems: number) => ({
-  type: "array",
-  description,
-  maxItems,
-  items: { type: "string" },
+	type: "array",
+	description,
+	maxItems,
+	items: { type: "string" },
 });
 
 const JOB_BRIEF_SCHEMA: JsonSchemaDefinition = {
-  name: "job_brief",
-  schema: {
-    type: "object",
-    properties: {
-      role_summary: {
-        type: "string",
-        description:
-          "One sentence summarizing what the person would actually do.",
-      },
-      they_want: stringList("Stated applicant requirements only", 6),
-      specifics: stringList("Named concrete specifics from the JD", 18),
-      company_offers: stringList(
-        "Concrete things the company says it offers",
-        5,
-      ),
-      practical_details: stringList(
-        "Concise key-value strings such as 'Salary: Not stated'",
-        8,
-      ),
-      missing_or_unclear: stringList(
-        "Important details not clearly stated in the JD",
-        5,
-      ),
-      repeated_signals: stringList("Repeated themes emphasized by the JD", 5),
-    },
-    required: [
-      "role_summary",
-      "they_want",
-      "specifics",
-      "company_offers",
-      "practical_details",
-      "missing_or_unclear",
-      "repeated_signals",
-    ],
-    additionalProperties: false,
-  },
+	name: "job_brief",
+	schema: {
+		type: "object",
+		properties: {
+			role_summary: {
+				type: "string",
+				description:
+					"One sentence summarizing what the person would actually do.",
+			},
+			they_want: stringList("Stated applicant requirements only", 6),
+			specifics: stringList("Named concrete specifics from the JD", 18),
+			company_offers: stringList(
+				"Concrete things the company says it offers",
+				5,
+			),
+			practical_details: stringList(
+				"Concise key-value strings such as 'Salary: Not stated'",
+				8,
+			),
+			missing_or_unclear: stringList(
+				"Important details not clearly stated in the JD",
+				5,
+			),
+			repeated_signals: stringList("Repeated themes emphasized by the JD", 5),
+		},
+		required: [
+			"role_summary",
+			"they_want",
+			"specifics",
+			"company_offers",
+			"practical_details",
+			"missing_or_unclear",
+			"repeated_signals",
+		],
+		additionalProperties: false,
+	},
 };
 
 export async function generateJobBrief(
-  jobDescription: string | null | undefined,
-  context: { jobId?: string } = {},
+	jobDescription: string | null | undefined,
+	context: { jobId?: string } = {},
 ): Promise<string | null> {
-  const description = jobDescription?.trim();
-  if (!description) return null;
+	const description = jobDescription?.trim();
+	if (!description) return null;
 
-  try {
-    const model = await resolveLlmModel("scoring");
-    const llm = await createConfiguredLlmService("scoring");
-    const result = await llm.callJson<JobBrief>({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(description) },
-      ],
-      jsonSchema: JOB_BRIEF_SCHEMA,
-      maxRetries: 2,
-      jobId: context.jobId,
-    });
+	try {
+		const model = await resolveLlmModel("scoring");
+		const llm = await createConfiguredLlmService("scoring");
+		const result = await llm.callJson<JobBrief>({
+			model,
+			messages: [
+				{ role: "system", content: SYSTEM_PROMPT },
+				{ role: "user", content: buildUserPrompt(description) },
+			],
+			jsonSchema: JOB_BRIEF_SCHEMA,
+			maxRetries: 2,
+			jobId: context.jobId,
+		});
 
-    if (!result.success) {
-      logger.warn("Job brief extraction failed", {
-        jobId: context.jobId,
-        error: result.error,
-      });
-      return null;
-    }
+		if (!result.success) {
+			logger.warn("Job brief extraction failed", {
+				jobId: context.jobId,
+				error: result.error,
+			});
+			return null;
+		}
 
-    const brief = normalizeJobBrief(result.data);
-    if (!brief) {
-      logger.warn("Job brief extraction returned invalid shape", {
-        jobId: context.jobId,
-      });
-      return null;
-    }
+		const brief = normalizeJobBrief(result.data);
+		if (!brief) {
+			logger.warn("Job brief extraction returned invalid shape", {
+				jobId: context.jobId,
+			});
+			return null;
+		}
 
-    return JSON.stringify(brief);
-  } catch (error) {
-    logger.warn("Job brief extraction failed", {
-      jobId: context.jobId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
+		return JSON.stringify(brief);
+	} catch (error) {
+		logger.warn("Job brief extraction failed", {
+			jobId: context.jobId,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return null;
+	}
 }
 
 function buildUserPrompt(jobDescription: string): string {
-  return `
+	return `
 Extract a concise, no-BS job brief from this job description.
 
 Return JSON in this exact shape:
@@ -148,25 +148,25 @@ ${jobDescription}
 }
 
 function normalizeJobBrief(value: JobBrief): JobBrief | null {
-  if (!value || typeof value !== "object") return null;
-  if (typeof value.role_summary !== "string") return null;
+	if (!value || typeof value !== "object") return null;
+	if (typeof value.role_summary !== "string") return null;
 
-  return {
-    role_summary: value.role_summary.trim() || "Not stated",
-    they_want: normalizeStringList(value.they_want, 6),
-    specifics: normalizeStringList(value.specifics, 18),
-    company_offers: normalizeStringList(value.company_offers, 5),
-    practical_details: normalizeStringList(value.practical_details, 8),
-    missing_or_unclear: normalizeStringList(value.missing_or_unclear, 5),
-    repeated_signals: normalizeStringList(value.repeated_signals, 5),
-  };
+	return {
+		role_summary: value.role_summary.trim() || "Not stated",
+		they_want: normalizeStringList(value.they_want, 6),
+		specifics: normalizeStringList(value.specifics, 18),
+		company_offers: normalizeStringList(value.company_offers, 5),
+		practical_details: normalizeStringList(value.practical_details, 8),
+		missing_or_unclear: normalizeStringList(value.missing_or_unclear, 5),
+		repeated_signals: normalizeStringList(value.repeated_signals, 5),
+	};
 }
 
 function normalizeStringList(value: unknown, maxItems: number): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, maxItems);
+	if (!Array.isArray(value)) return [];
+	return value
+		.filter((item): item is string => typeof item === "string")
+		.map((item) => item.trim())
+		.filter(Boolean)
+		.slice(0, maxItems);
 }

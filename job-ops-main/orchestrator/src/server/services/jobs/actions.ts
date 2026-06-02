@@ -3,8 +3,8 @@ import { isDemoMode } from "@server/config/demo";
 import { processJob } from "@server/pipeline/index";
 import * as jobsRepo from "@server/repositories/jobs";
 import {
-  simulateProcessJob,
-  simulateRescoreJob,
+	simulateProcessJob,
+	simulateRescoreJob,
 } from "@server/services/demo-simulator";
 import { generateJobBrief } from "@server/services/job-brief";
 import { getProfile } from "@server/services/profile";
@@ -12,260 +12,260 @@ import { scoreJobSuitability } from "@server/services/scorer";
 import type { JobAction, JobActionResult, JobStatus } from "@shared/types";
 
 const SKIPPABLE_STATUSES: ReadonlySet<JobStatus> = new Set([
-  "discovered",
-  "ready",
+	"discovered",
+	"ready",
 ]);
 
 function mapErrorForResult(error: unknown): {
-  code: string;
-  message: string;
-  details?: unknown;
+	code: string;
+	message: string;
+	details?: unknown;
 } {
-  if (error instanceof AppError) {
-    return {
-      code: error.code,
-      message: error.message,
-      ...(error.details !== undefined ? { details: error.details } : {}),
-    };
-  }
+	if (error instanceof AppError) {
+		return {
+			code: error.code,
+			message: error.message,
+			...(error.details !== undefined ? { details: error.details } : {}),
+		};
+	}
 
-  if (error instanceof Error) {
-    return {
-      code: "INTERNAL_ERROR",
-      message: error.message || "Unknown error",
-    };
-  }
+	if (error instanceof Error) {
+		return {
+			code: "INTERNAL_ERROR",
+			message: error.message || "Unknown error",
+		};
+	}
 
-  return {
-    code: "INTERNAL_ERROR",
-    message: "Unknown error",
-  };
+	return {
+		code: "INTERNAL_ERROR",
+		message: "Unknown error",
+	};
 }
 
 const STATUS_BY_APP_ERROR_CODE: Record<AppErrorCode, number> = {
-  INVALID_REQUEST: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  REQUEST_TIMEOUT: 408,
-  CONFLICT: 409,
-  UNPROCESSABLE_ENTITY: 422,
-  SERVICE_UNAVAILABLE: 503,
-  UPSTREAM_ERROR: 502,
-  INTERNAL_ERROR: 500,
+	INVALID_REQUEST: 400,
+	UNAUTHORIZED: 401,
+	FORBIDDEN: 403,
+	NOT_FOUND: 404,
+	REQUEST_TIMEOUT: 408,
+	CONFLICT: 409,
+	UNPROCESSABLE_ENTITY: 422,
+	SERVICE_UNAVAILABLE: 503,
+	UPSTREAM_ERROR: 502,
+	INTERNAL_ERROR: 500,
 };
 
 export type JobActionExecutionOptions = {
-  getProfileForRescore?: () => Promise<Record<string, unknown>>;
-  forceMoveToReady?: boolean;
-  requestOrigin?: string | null;
-  analyticsOrigin?:
-    | "move_to_ready"
-    | "generate_pdf"
-    | "pipeline"
-    | "manual_job_create";
+	getProfileForRescore?: () => Promise<Record<string, unknown>>;
+	forceMoveToReady?: boolean;
+	requestOrigin?: string | null;
+	analyticsOrigin?:
+		| "move_to_ready"
+		| "generate_pdf"
+		| "pipeline"
+		| "manual_job_create";
 };
 
 export function createSharedRescoreProfileLoader(): () => Promise<
-  Record<string, unknown>
+	Record<string, unknown>
 > {
-  let profilePromise: Promise<Record<string, unknown>> | null = null;
+	let profilePromise: Promise<Record<string, unknown>> | null = null;
 
-  return async () => {
-    if (!profilePromise) {
-      profilePromise = (async () => {
-        const rawProfile = await getProfile();
-        if (
-          !rawProfile ||
-          typeof rawProfile !== "object" ||
-          Array.isArray(rawProfile)
-        ) {
-          throw badRequest("Invalid resume profile format");
-        }
-        return rawProfile as Record<string, unknown>;
-      })();
-    }
-    return profilePromise;
-  };
+	return async () => {
+		if (!profilePromise) {
+			profilePromise = (async () => {
+				const rawProfile = await getProfile();
+				if (
+					!rawProfile ||
+					typeof rawProfile !== "object" ||
+					Array.isArray(rawProfile)
+				) {
+					throw badRequest("Invalid resume profile format");
+				}
+				return rawProfile as Record<string, unknown>;
+			})();
+		}
+		return profilePromise;
+	};
 }
 
 export function buildJobActionExecutionOptions(
-  action: JobAction,
-  options?: {
-    forceMoveToReady?: boolean;
-    requestOrigin?: string | null;
-  },
+	action: JobAction,
+	options?: {
+		forceMoveToReady?: boolean;
+		requestOrigin?: string | null;
+	},
 ): JobActionExecutionOptions {
-  return {
-    ...(action === "rescore" && !isDemoMode()
-      ? { getProfileForRescore: createSharedRescoreProfileLoader() }
-      : {}),
-    ...(action === "move_to_ready" && options?.forceMoveToReady !== undefined
-      ? { forceMoveToReady: options.forceMoveToReady }
-      : {}),
-    ...(action === "move_to_ready"
-      ? { requestOrigin: options?.requestOrigin ?? null }
-      : {}),
-  };
+	return {
+		...(action === "rescore" && !isDemoMode()
+			? { getProfileForRescore: createSharedRescoreProfileLoader() }
+			: {}),
+		...(action === "move_to_ready" && options?.forceMoveToReady !== undefined
+			? { forceMoveToReady: options.forceMoveToReady }
+			: {}),
+		...(action === "move_to_ready"
+			? { requestOrigin: options?.requestOrigin ?? null }
+			: {}),
+	};
 }
 
 export async function executeJobActionForJob(
-  action: JobAction,
-  jobId: string,
-  options?: JobActionExecutionOptions,
+	action: JobAction,
+	jobId: string,
+	options?: JobActionExecutionOptions,
 ): Promise<JobActionResult> {
-  try {
-    const job = await jobsRepo.getJobById(jobId);
-    if (!job) {
-      throw new AppError({
-        status: 404,
-        code: "NOT_FOUND",
-        message: "Job not found",
-      });
-    }
+	try {
+		const job = await jobsRepo.getJobById(jobId);
+		if (!job) {
+			throw new AppError({
+				status: 404,
+				code: "NOT_FOUND",
+				message: "Job not found",
+			});
+		}
 
-    if (action === "skip") {
-      if (!SKIPPABLE_STATUSES.has(job.status)) {
-        throw badRequest(`Job is not skippable from status "${job.status}"`, {
-          jobId,
-          status: job.status,
-          allowedStatuses: ["discovered", "ready"],
-        });
-      }
+		if (action === "skip") {
+			if (!SKIPPABLE_STATUSES.has(job.status)) {
+				throw badRequest(`Job is not skippable from status "${job.status}"`, {
+					jobId,
+					status: job.status,
+					allowedStatuses: ["discovered", "ready"],
+				});
+			}
 
-      const updated = await jobsRepo.updateJob(jobId, { status: "skipped" });
-      if (!updated) {
-        throw new AppError({
-          status: 404,
-          code: "NOT_FOUND",
-          message: "Job not found",
-        });
-      }
+			const updated = await jobsRepo.updateJob(jobId, { status: "skipped" });
+			if (!updated) {
+				throw new AppError({
+					status: 404,
+					code: "NOT_FOUND",
+					message: "Job not found",
+				});
+			}
 
-      return { jobId, ok: true, job: updated };
-    }
+			return { jobId, ok: true, job: updated };
+		}
 
-    if (action === "move_to_ready") {
-      if (job.status !== "discovered") {
-        throw badRequest(
-          `Job is not movable to Ready from status "${job.status}"`,
-          {
-            jobId,
-            status: job.status,
-            requiredStatus: "discovered",
-          },
-        );
-      }
+		if (action === "move_to_ready") {
+			if (job.status !== "discovered") {
+				throw badRequest(
+					`Job is not movable to Ready from status "${job.status}"`,
+					{
+						jobId,
+						status: job.status,
+						requiredStatus: "discovered",
+					},
+				);
+			}
 
-      if (isDemoMode()) {
-        const simulated = await simulateProcessJob(jobId, {
-          force: options?.forceMoveToReady ?? false,
-        });
-        if (!simulated.success) {
-          throw new AppError({
-            status: 500,
-            code: "INTERNAL_ERROR",
-            message: simulated.error || "Failed to process job",
-          });
-        }
-      } else {
-        const processed = await processJob(jobId, {
-          force: options?.forceMoveToReady ?? false,
-          requestOrigin: options?.requestOrigin ?? null,
-          analyticsOrigin: options?.analyticsOrigin ?? "move_to_ready",
-        });
-        if (!processed.success) {
-          throw new AppError({
-            status: 500,
-            code: "INTERNAL_ERROR",
-            message: processed.error || "Failed to process job",
-          });
-        }
-      }
+			if (isDemoMode()) {
+				const simulated = await simulateProcessJob(jobId, {
+					force: options?.forceMoveToReady ?? false,
+				});
+				if (!simulated.success) {
+					throw new AppError({
+						status: 500,
+						code: "INTERNAL_ERROR",
+						message: simulated.error || "Failed to process job",
+					});
+				}
+			} else {
+				const processed = await processJob(jobId, {
+					force: options?.forceMoveToReady ?? false,
+					requestOrigin: options?.requestOrigin ?? null,
+					analyticsOrigin: options?.analyticsOrigin ?? "move_to_ready",
+				});
+				if (!processed.success) {
+					throw new AppError({
+						status: 500,
+						code: "INTERNAL_ERROR",
+						message: processed.error || "Failed to process job",
+					});
+				}
+			}
 
-      const updated = await jobsRepo.getJobById(jobId);
-      if (!updated) {
-        throw new AppError({
-          status: 404,
-          code: "NOT_FOUND",
-          message: "Job not found after processing",
-        });
-      }
+			const updated = await jobsRepo.getJobById(jobId);
+			if (!updated) {
+				throw new AppError({
+					status: 404,
+					code: "NOT_FOUND",
+					message: "Job not found after processing",
+				});
+			}
 
-      return { jobId, ok: true, job: updated };
-    }
+			return { jobId, ok: true, job: updated };
+		}
 
-    if (job.status === "processing") {
-      throw badRequest(`Job is not rescorable from status "${job.status}"`, {
-        jobId,
-        status: job.status,
-        disallowedStatus: "processing",
-      });
-    }
+		if (job.status === "processing") {
+			throw badRequest(`Job is not rescorable from status "${job.status}"`, {
+				jobId,
+				status: job.status,
+				disallowedStatus: "processing",
+			});
+		}
 
-    if (isDemoMode()) {
-      const simulated = await simulateRescoreJob(job.id);
-      return { jobId, ok: true, job: simulated };
-    }
+		if (isDemoMode()) {
+			const simulated = await simulateRescoreJob(job.id);
+			return { jobId, ok: true, job: simulated };
+		}
 
-    const profile = options?.getProfileForRescore
-      ? await options.getProfileForRescore()
-      : await (async () => {
-          const rawProfile = await getProfile();
-          if (
-            !rawProfile ||
-            typeof rawProfile !== "object" ||
-            Array.isArray(rawProfile)
-          ) {
-            throw badRequest("Invalid resume profile format");
-          }
-          return rawProfile as Record<string, unknown>;
-        })();
+		const profile = options?.getProfileForRescore
+			? await options.getProfileForRescore()
+			: await (async () => {
+					const rawProfile = await getProfile();
+					if (
+						!rawProfile ||
+						typeof rawProfile !== "object" ||
+						Array.isArray(rawProfile)
+					) {
+						throw badRequest("Invalid resume profile format");
+					}
+					return rawProfile as Record<string, unknown>;
+				})();
 
-    const [{ score, reason }, jobBrief] = await Promise.all([
-      scoreJobSuitability(job, profile),
-      generateJobBrief(job.jobDescription, { jobId: job.id }),
-    ]);
+		const [{ score, reason }, jobBrief] = await Promise.all([
+			scoreJobSuitability(job, profile),
+			generateJobBrief(job.jobDescription, { jobId: job.id }),
+		]);
 
-    const updated = await jobsRepo.updateJob(job.id, {
-      suitabilityScore: score,
-      suitabilityReason: reason,
-      jobBrief,
-    });
-    if (!updated) {
-      throw new AppError({
-        status: 404,
-        code: "NOT_FOUND",
-        message: "Job not found",
-      });
-    }
+		const updated = await jobsRepo.updateJob(job.id, {
+			suitabilityScore: score,
+			suitabilityReason: reason,
+			jobBrief,
+		});
+		if (!updated) {
+			throw new AppError({
+				status: 404,
+				code: "NOT_FOUND",
+				message: "Job not found",
+			});
+		}
 
-    return { jobId, ok: true, job: updated };
-  } catch (error) {
-    const mapped = mapErrorForResult(error);
-    return {
-      jobId,
-      ok: false,
-      error: {
-        code: mapped.code,
-        message: mapped.message,
-      },
-    };
-  }
+		return { jobId, ok: true, job: updated };
+	} catch (error) {
+		const mapped = mapErrorForResult(error);
+		return {
+			jobId,
+			ok: false,
+			error: {
+				code: mapped.code,
+				message: mapped.message,
+			},
+		};
+	}
 }
 
 export function mapJobActionFailure(
-  failure: Extract<JobActionResult, { ok: false }>,
+	failure: Extract<JobActionResult, { ok: false }>,
 ): AppError {
-  const code = (
-    failure.error.code in STATUS_BY_APP_ERROR_CODE
-      ? failure.error.code
-      : "INTERNAL_ERROR"
-  ) as AppErrorCode;
+	const code = (
+		failure.error.code in STATUS_BY_APP_ERROR_CODE
+			? failure.error.code
+			: "INTERNAL_ERROR"
+	) as AppErrorCode;
 
-  return new AppError({
-    status: STATUS_BY_APP_ERROR_CODE[code],
-    code,
-    message: failure.error.message,
-  });
+	return new AppError({
+		status: STATUS_BY_APP_ERROR_CODE[code],
+		code,
+		message: failure.error.message,
+	});
 }

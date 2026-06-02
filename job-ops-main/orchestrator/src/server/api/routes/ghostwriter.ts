@@ -9,789 +9,789 @@ import { z } from "zod";
 export const ghostwriterRouter = Router({ mergeParams: true });
 
 const createThreadSchema = z.object({
-  title: z.string().trim().max(200).nullable().optional(),
+	title: z.string().trim().max(200).nullable().optional(),
 });
 
 const listMessagesQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(500).optional(),
-  offset: z.coerce.number().int().min(0).max(10000).optional(),
+	limit: z.coerce.number().int().min(1).max(500).optional(),
+	offset: z.coerce.number().int().min(0).max(10000).optional(),
 });
 
 const selectedNoteIdsSchema = z.array(z.string().trim().min(1)).default([]);
 const selectedEmailIdsSchema = z.array(z.string().trim().min(1)).default([]);
 const selectedDocumentIdsSchema = z.array(z.string().trim().min(1)).default([]);
 const selectedContextSchema = {
-  selectedNoteIds: selectedNoteIdsSchema.optional(),
-  selectedEmailIds: selectedEmailIdsSchema.optional(),
-  selectedDocumentIds: selectedDocumentIdsSchema.optional(),
+	selectedNoteIds: selectedNoteIdsSchema.optional(),
+	selectedEmailIds: selectedEmailIdsSchema.optional(),
+	selectedDocumentIds: selectedDocumentIdsSchema.optional(),
 };
 
 const updateContextSchema = z
-  .object({
-    ...selectedContextSchema,
-  })
-  .refine(
-    (input) =>
-      input.selectedNoteIds !== undefined ||
-      input.selectedEmailIds !== undefined ||
-      input.selectedDocumentIds !== undefined,
-    {
-      message: "At least one context selection must be provided.",
-    },
-  );
+	.object({
+		...selectedContextSchema,
+	})
+	.refine(
+		(input) =>
+			input.selectedNoteIds !== undefined ||
+			input.selectedEmailIds !== undefined ||
+			input.selectedDocumentIds !== undefined,
+		{
+			message: "At least one context selection must be provided.",
+		},
+	);
 
 const imageAttachmentSchema = z
-  .object({
-    id: z.string().trim().max(80).optional(),
-    name: z.string().trim().min(1).max(180),
-    mediaType: z.enum(["image/png", "image/jpeg", "image/webp"]),
-    dataUrl: z
-      .string()
-      .max(2_800_000)
-      .regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
-  })
-  .superRefine((attachment, ctx) => {
-    if (
-      !attachment.dataUrl.startsWith(`data:${attachment.mediaType};base64,`)
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["dataUrl"],
-        message:
-          "Image data URL media type must match the attachment media type.",
-      });
-    }
-  });
+	.object({
+		id: z.string().trim().max(80).optional(),
+		name: z.string().trim().min(1).max(180),
+		mediaType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+		dataUrl: z
+			.string()
+			.max(2_800_000)
+			.regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
+	})
+	.superRefine((attachment, ctx) => {
+		if (
+			!attachment.dataUrl.startsWith(`data:${attachment.mediaType};base64,`)
+		) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["dataUrl"],
+				message:
+					"Image data URL media type must match the attachment media type.",
+			});
+		}
+	});
 
 const imageAttachmentsSchema = z
-  .array(imageAttachmentSchema)
-  .max(3)
-  .default([]);
+	.array(imageAttachmentSchema)
+	.max(3)
+	.default([]);
 
 const sendMessageSchema = z.object({
-  content: z.string().trim().min(1).max(20000),
-  ...selectedContextSchema,
-  attachments: imageAttachmentsSchema.optional(),
-  stream: z.boolean().optional(),
+	content: z.string().trim().min(1).max(20000),
+	...selectedContextSchema,
+	attachments: imageAttachmentsSchema.optional(),
+	stream: z.boolean().optional(),
 });
 
 const regenerateSchema = z.object({
-  ...selectedContextSchema,
-  stream: z.boolean().optional(),
+	...selectedContextSchema,
+	stream: z.boolean().optional(),
 });
 
 const editMessageSchema = z.object({
-  content: z.string().trim().min(1).max(20000),
-  ...selectedContextSchema,
-  attachments: imageAttachmentsSchema.optional(),
-  stream: z.boolean().optional(),
+	content: z.string().trim().min(1).max(20000),
+	...selectedContextSchema,
+	attachments: imageAttachmentsSchema.optional(),
+	stream: z.boolean().optional(),
 });
 
 function getJobId(req: Request): string {
-  const jobId = req.params.id;
-  if (!jobId) {
-    throw badRequest("Missing job id");
-  }
-  return jobId;
+	const jobId = req.params.id;
+	if (!jobId) {
+		throw badRequest("Missing job id");
+	}
+	return jobId;
 }
 
 ghostwriterRouter.get(
-  "/messages",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const parsed = listMessagesQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+	"/messages",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const parsed = listMessagesQuerySchema.safeParse(req.query);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.listMessagesForJob({
-        jobId,
-        limit: parsed.data.limit,
-        offset: parsed.data.offset,
-      });
-      ok(res, {
-        messages: result.messages,
-        branches: result.branches,
-        selectedNoteIds: result.selectedNoteIds,
-        selectedEmailIds: result.selectedEmailIds,
-        selectedDocumentIds: result.selectedDocumentIds,
-      });
-    });
-  }),
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.listMessagesForJob({
+				jobId,
+				limit: parsed.data.limit,
+				offset: parsed.data.offset,
+			});
+			ok(res, {
+				messages: result.messages,
+				branches: result.branches,
+				selectedNoteIds: result.selectedNoteIds,
+				selectedEmailIds: result.selectedEmailIds,
+				selectedDocumentIds: result.selectedDocumentIds,
+			});
+		});
+	}),
 );
 
 ghostwriterRouter.patch(
-  "/context",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const parsed = updateContextSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+	"/context",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const parsed = updateContextSchema.safeParse(req.body);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.updateContextForJob({
-        jobId,
-        selectedNoteIds: parsed.data.selectedNoteIds,
-        selectedEmailIds: parsed.data.selectedEmailIds,
-        selectedDocumentIds: parsed.data.selectedDocumentIds,
-      });
-      ok(res, result);
-    });
-  }),
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.updateContextForJob({
+				jobId,
+				selectedNoteIds: parsed.data.selectedNoteIds,
+				selectedEmailIds: parsed.data.selectedEmailIds,
+				selectedDocumentIds: parsed.data.selectedDocumentIds,
+			});
+			ok(res, result);
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/messages",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
+	"/messages",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
 
-    const parsed = sendMessageSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+		const parsed = sendMessageSchema.safeParse(req.body);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      if (parsed.data.stream) {
-        setupSse(res, {
-          cacheControl: "no-cache, no-transform",
-          flushHeaders: true,
-        });
+		await runWithRequestContext({ jobId }, async () => {
+			if (parsed.data.stream) {
+				setupSse(res, {
+					cacheControl: "no-cache, no-transform",
+					flushHeaders: true,
+				});
 
-        try {
-          await ghostwriterService.sendMessageForJob({
-            jobId,
-            content: parsed.data.content,
-            attachments: parsed.data.attachments,
-            selectedNoteIds: parsed.data.selectedNoteIds,
-            selectedEmailIds: parsed.data.selectedEmailIds,
-            selectedDocumentIds: parsed.data.selectedDocumentIds,
-            stream: {
-              onReady: ({ runId, threadId, messageId, requestId }) =>
-                writeSseData(res, {
-                  type: "ready",
-                  runId,
-                  threadId,
-                  messageId,
-                  requestId,
-                }),
-              onDelta: ({ runId, messageId, delta }) =>
-                writeSseData(res, {
-                  type: "delta",
-                  runId,
-                  messageId,
-                  delta,
-                }),
-              onCompleted: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "completed",
-                  runId,
-                  message,
-                }),
-              onCancelled: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "cancelled",
-                  runId,
-                  message,
-                }),
-              onError: ({ runId, code, message, requestId }) =>
-                writeSseData(res, {
-                  type: "error",
-                  runId,
-                  code,
-                  message,
-                  requestId,
-                }),
-            },
-          });
-        } catch (error) {
-          const appError = toAppError(error);
-          writeSseData(res, {
-            type: "error",
-            code: appError.code,
-            message: appError.message,
-            requestId: res.getHeader("x-request-id") || "unknown",
-          });
-        } finally {
-          res.end();
-        }
+				try {
+					await ghostwriterService.sendMessageForJob({
+						jobId,
+						content: parsed.data.content,
+						attachments: parsed.data.attachments,
+						selectedNoteIds: parsed.data.selectedNoteIds,
+						selectedEmailIds: parsed.data.selectedEmailIds,
+						selectedDocumentIds: parsed.data.selectedDocumentIds,
+						stream: {
+							onReady: ({ runId, threadId, messageId, requestId }) =>
+								writeSseData(res, {
+									type: "ready",
+									runId,
+									threadId,
+									messageId,
+									requestId,
+								}),
+							onDelta: ({ runId, messageId, delta }) =>
+								writeSseData(res, {
+									type: "delta",
+									runId,
+									messageId,
+									delta,
+								}),
+							onCompleted: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "completed",
+									runId,
+									message,
+								}),
+							onCancelled: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "cancelled",
+									runId,
+									message,
+								}),
+							onError: ({ runId, code, message, requestId }) =>
+								writeSseData(res, {
+									type: "error",
+									runId,
+									code,
+									message,
+									requestId,
+								}),
+						},
+					});
+				} catch (error) {
+					const appError = toAppError(error);
+					writeSseData(res, {
+						type: "error",
+						code: appError.code,
+						message: appError.message,
+						requestId: res.getHeader("x-request-id") || "unknown",
+					});
+				} finally {
+					res.end();
+				}
 
-        return;
-      }
+				return;
+			}
 
-      const result = await ghostwriterService.sendMessageForJob({
-        jobId,
-        content: parsed.data.content,
-        attachments: parsed.data.attachments,
-        selectedNoteIds: parsed.data.selectedNoteIds,
-        selectedEmailIds: parsed.data.selectedEmailIds,
-        selectedDocumentIds: parsed.data.selectedDocumentIds,
-      });
+			const result = await ghostwriterService.sendMessageForJob({
+				jobId,
+				content: parsed.data.content,
+				attachments: parsed.data.attachments,
+				selectedNoteIds: parsed.data.selectedNoteIds,
+				selectedEmailIds: parsed.data.selectedEmailIds,
+				selectedDocumentIds: parsed.data.selectedDocumentIds,
+			});
 
-      ok(res, {
-        userMessage: result.userMessage,
-        assistantMessage: result.assistantMessage,
-        runId: result.runId,
-      });
-    });
-  }),
+			ok(res, {
+				userMessage: result.userMessage,
+				assistantMessage: result.assistantMessage,
+				runId: result.runId,
+			});
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/runs/:runId/cancel",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const runId = req.params.runId;
-    if (!runId) {
-      return fail(res, badRequest("Missing run id"));
-    }
+	"/runs/:runId/cancel",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const runId = req.params.runId;
+		if (!runId) {
+			return fail(res, badRequest("Missing run id"));
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.cancelRunForJob({
-        jobId,
-        runId,
-      });
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.cancelRunForJob({
+				jobId,
+				runId,
+			});
 
-      ok(res, result);
-    });
-  }),
+			ok(res, result);
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/messages/:assistantMessageId/regenerate",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const assistantMessageId = req.params.assistantMessageId;
-    if (!assistantMessageId) {
-      return fail(res, badRequest("Missing message id"));
-    }
+	"/messages/:assistantMessageId/regenerate",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const assistantMessageId = req.params.assistantMessageId;
+		if (!assistantMessageId) {
+			return fail(res, badRequest("Missing message id"));
+		}
 
-    const parsed = regenerateSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+		const parsed = regenerateSchema.safeParse(req.body ?? {});
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      if (parsed.data.stream) {
-        setupSse(res, {
-          cacheControl: "no-cache, no-transform",
-          flushHeaders: true,
-        });
+		await runWithRequestContext({ jobId }, async () => {
+			if (parsed.data.stream) {
+				setupSse(res, {
+					cacheControl: "no-cache, no-transform",
+					flushHeaders: true,
+				});
 
-        try {
-          await ghostwriterService.regenerateMessageForJob({
-            jobId,
-            assistantMessageId,
-            selectedNoteIds: parsed.data.selectedNoteIds,
-            selectedEmailIds: parsed.data.selectedEmailIds,
-            selectedDocumentIds: parsed.data.selectedDocumentIds,
-            stream: {
-              onReady: ({ runId, threadId, messageId, requestId }) =>
-                writeSseData(res, {
-                  type: "ready",
-                  runId,
-                  threadId,
-                  messageId,
-                  requestId,
-                }),
-              onDelta: ({ runId, messageId, delta }) =>
-                writeSseData(res, {
-                  type: "delta",
-                  runId,
-                  messageId,
-                  delta,
-                }),
-              onCompleted: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "completed",
-                  runId,
-                  message,
-                }),
-              onCancelled: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "cancelled",
-                  runId,
-                  message,
-                }),
-              onError: ({ runId, code, message, requestId }) =>
-                writeSseData(res, {
-                  type: "error",
-                  runId,
-                  code,
-                  message,
-                  requestId,
-                }),
-            },
-          });
-        } catch (error) {
-          const appError = toAppError(error);
-          writeSseData(res, {
-            type: "error",
-            code: appError.code,
-            message: appError.message,
-            requestId: res.getHeader("x-request-id") || "unknown",
-          });
-        } finally {
-          res.end();
-        }
+				try {
+					await ghostwriterService.regenerateMessageForJob({
+						jobId,
+						assistantMessageId,
+						selectedNoteIds: parsed.data.selectedNoteIds,
+						selectedEmailIds: parsed.data.selectedEmailIds,
+						selectedDocumentIds: parsed.data.selectedDocumentIds,
+						stream: {
+							onReady: ({ runId, threadId, messageId, requestId }) =>
+								writeSseData(res, {
+									type: "ready",
+									runId,
+									threadId,
+									messageId,
+									requestId,
+								}),
+							onDelta: ({ runId, messageId, delta }) =>
+								writeSseData(res, {
+									type: "delta",
+									runId,
+									messageId,
+									delta,
+								}),
+							onCompleted: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "completed",
+									runId,
+									message,
+								}),
+							onCancelled: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "cancelled",
+									runId,
+									message,
+								}),
+							onError: ({ runId, code, message, requestId }) =>
+								writeSseData(res, {
+									type: "error",
+									runId,
+									code,
+									message,
+									requestId,
+								}),
+						},
+					});
+				} catch (error) {
+					const appError = toAppError(error);
+					writeSseData(res, {
+						type: "error",
+						code: appError.code,
+						message: appError.message,
+						requestId: res.getHeader("x-request-id") || "unknown",
+					});
+				} finally {
+					res.end();
+				}
 
-        return;
-      }
+				return;
+			}
 
-      const result = await ghostwriterService.regenerateMessageForJob({
-        jobId,
-        assistantMessageId,
-        selectedNoteIds: parsed.data.selectedNoteIds,
-        selectedEmailIds: parsed.data.selectedEmailIds,
-        selectedDocumentIds: parsed.data.selectedDocumentIds,
-      });
+			const result = await ghostwriterService.regenerateMessageForJob({
+				jobId,
+				assistantMessageId,
+				selectedNoteIds: parsed.data.selectedNoteIds,
+				selectedEmailIds: parsed.data.selectedEmailIds,
+				selectedDocumentIds: parsed.data.selectedDocumentIds,
+			});
 
-      ok(res, result);
-    });
-  }),
+			ok(res, result);
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/messages/:messageId/edit",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const messageId = req.params.messageId;
-    if (!messageId) {
-      return fail(res, badRequest("Missing message id"));
-    }
+	"/messages/:messageId/edit",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const messageId = req.params.messageId;
+		if (!messageId) {
+			return fail(res, badRequest("Missing message id"));
+		}
 
-    const parsed = editMessageSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+		const parsed = editMessageSchema.safeParse(req.body);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      if (parsed.data.stream) {
-        setupSse(res, {
-          cacheControl: "no-cache, no-transform",
-          flushHeaders: true,
-        });
+		await runWithRequestContext({ jobId }, async () => {
+			if (parsed.data.stream) {
+				setupSse(res, {
+					cacheControl: "no-cache, no-transform",
+					flushHeaders: true,
+				});
 
-        try {
-          await ghostwriterService.editMessageForJob({
-            jobId,
-            messageId,
-            content: parsed.data.content,
-            attachments: parsed.data.attachments,
-            selectedNoteIds: parsed.data.selectedNoteIds,
-            selectedEmailIds: parsed.data.selectedEmailIds,
-            selectedDocumentIds: parsed.data.selectedDocumentIds,
-            stream: {
-              onReady: ({ runId, threadId, messageId, requestId }) =>
-                writeSseData(res, {
-                  type: "ready",
-                  runId,
-                  threadId,
-                  messageId,
-                  requestId,
-                }),
-              onDelta: ({ runId, messageId, delta }) =>
-                writeSseData(res, {
-                  type: "delta",
-                  runId,
-                  messageId,
-                  delta,
-                }),
-              onCompleted: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "completed",
-                  runId,
-                  message,
-                }),
-              onCancelled: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "cancelled",
-                  runId,
-                  message,
-                }),
-              onError: ({ runId, code, message, requestId }) =>
-                writeSseData(res, {
-                  type: "error",
-                  runId,
-                  code,
-                  message,
-                  requestId,
-                }),
-            },
-          });
-        } catch (error) {
-          const appError = toAppError(error);
-          writeSseData(res, {
-            type: "error",
-            code: appError.code,
-            message: appError.message,
-            requestId: res.getHeader("x-request-id") || "unknown",
-          });
-        } finally {
-          res.end();
-        }
+				try {
+					await ghostwriterService.editMessageForJob({
+						jobId,
+						messageId,
+						content: parsed.data.content,
+						attachments: parsed.data.attachments,
+						selectedNoteIds: parsed.data.selectedNoteIds,
+						selectedEmailIds: parsed.data.selectedEmailIds,
+						selectedDocumentIds: parsed.data.selectedDocumentIds,
+						stream: {
+							onReady: ({ runId, threadId, messageId, requestId }) =>
+								writeSseData(res, {
+									type: "ready",
+									runId,
+									threadId,
+									messageId,
+									requestId,
+								}),
+							onDelta: ({ runId, messageId, delta }) =>
+								writeSseData(res, {
+									type: "delta",
+									runId,
+									messageId,
+									delta,
+								}),
+							onCompleted: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "completed",
+									runId,
+									message,
+								}),
+							onCancelled: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "cancelled",
+									runId,
+									message,
+								}),
+							onError: ({ runId, code, message, requestId }) =>
+								writeSseData(res, {
+									type: "error",
+									runId,
+									code,
+									message,
+									requestId,
+								}),
+						},
+					});
+				} catch (error) {
+					const appError = toAppError(error);
+					writeSseData(res, {
+						type: "error",
+						code: appError.code,
+						message: appError.message,
+						requestId: res.getHeader("x-request-id") || "unknown",
+					});
+				} finally {
+					res.end();
+				}
 
-        return;
-      }
+				return;
+			}
 
-      const result = await ghostwriterService.editMessageForJob({
-        jobId,
-        messageId,
-        content: parsed.data.content,
-        attachments: parsed.data.attachments,
-        selectedNoteIds: parsed.data.selectedNoteIds,
-        selectedEmailIds: parsed.data.selectedEmailIds,
-        selectedDocumentIds: parsed.data.selectedDocumentIds,
-      });
+			const result = await ghostwriterService.editMessageForJob({
+				jobId,
+				messageId,
+				content: parsed.data.content,
+				attachments: parsed.data.attachments,
+				selectedNoteIds: parsed.data.selectedNoteIds,
+				selectedEmailIds: parsed.data.selectedEmailIds,
+				selectedDocumentIds: parsed.data.selectedDocumentIds,
+			});
 
-      ok(res, {
-        userMessage: result.userMessage,
-        assistantMessage: result.assistantMessage,
-        runId: result.runId,
-      });
-    });
-  }),
+			ok(res, {
+				userMessage: result.userMessage,
+				assistantMessage: result.assistantMessage,
+				runId: result.runId,
+			});
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/messages/:messageId/switch-branch",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const messageId = req.params.messageId;
-    if (!messageId) {
-      return fail(res, badRequest("Missing message id"));
-    }
+	"/messages/:messageId/switch-branch",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const messageId = req.params.messageId;
+		if (!messageId) {
+			return fail(res, badRequest("Missing message id"));
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.switchBranchForJob({
-        jobId,
-        messageId,
-      });
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.switchBranchForJob({
+				jobId,
+				messageId,
+			});
 
-      ok(res, { messages: result.messages, branches: result.branches });
-    });
-  }),
+			ok(res, { messages: result.messages, branches: result.branches });
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/reset",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
+	"/reset",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.resetConversationForJob({
-        jobId,
-      });
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.resetConversationForJob({
+				jobId,
+			});
 
-      ok(res, result);
-    });
-  }),
+			ok(res, result);
+		});
+	}),
 );
 
 ghostwriterRouter.get(
-  "/threads",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
+	"/threads",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
 
-    await runWithRequestContext({ jobId }, async () => {
-      const threads = await ghostwriterService.listThreads(jobId);
-      ok(res, { threads });
-    });
-  }),
+		await runWithRequestContext({ jobId }, async () => {
+			const threads = await ghostwriterService.listThreads(jobId);
+			ok(res, { threads });
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/threads",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const parsed = createThreadSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+	"/threads",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const parsed = createThreadSchema.safeParse(req.body);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const thread = await ghostwriterService.createThread({
-        jobId,
-        title: parsed.data.title,
-      });
-      ok(res, { thread }, 201);
-    });
-  }),
+		await runWithRequestContext({ jobId }, async () => {
+			const thread = await ghostwriterService.createThread({
+				jobId,
+				title: parsed.data.title,
+			});
+			ok(res, { thread }, 201);
+		});
+	}),
 );
 
 ghostwriterRouter.get(
-  "/threads/:threadId/messages",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const threadId = req.params.threadId;
-    if (!threadId) {
-      return fail(res, badRequest("Missing thread id"));
-    }
+	"/threads/:threadId/messages",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const threadId = req.params.threadId;
+		if (!threadId) {
+			return fail(res, badRequest("Missing thread id"));
+		}
 
-    const parsed = listMessagesQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+		const parsed = listMessagesQuerySchema.safeParse(req.query);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.listMessages({
-        jobId,
-        threadId,
-        limit: parsed.data.limit,
-        offset: parsed.data.offset,
-      });
-      ok(res, { messages: result.messages, branches: result.branches });
-    });
-  }),
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.listMessages({
+				jobId,
+				threadId,
+				limit: parsed.data.limit,
+				offset: parsed.data.offset,
+			});
+			ok(res, { messages: result.messages, branches: result.branches });
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/threads/:threadId/messages",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const threadId = req.params.threadId;
-    if (!threadId) {
-      return fail(res, badRequest("Missing thread id"));
-    }
+	"/threads/:threadId/messages",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const threadId = req.params.threadId;
+		if (!threadId) {
+			return fail(res, badRequest("Missing thread id"));
+		}
 
-    const parsed = sendMessageSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+		const parsed = sendMessageSchema.safeParse(req.body);
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      if (parsed.data.stream) {
-        setupSse(res, {
-          cacheControl: "no-cache, no-transform",
-          flushHeaders: true,
-        });
+		await runWithRequestContext({ jobId }, async () => {
+			if (parsed.data.stream) {
+				setupSse(res, {
+					cacheControl: "no-cache, no-transform",
+					flushHeaders: true,
+				});
 
-        try {
-          await ghostwriterService.sendMessage({
-            jobId,
-            threadId,
-            content: parsed.data.content,
-            attachments: parsed.data.attachments,
-            selectedNoteIds: parsed.data.selectedNoteIds,
-            selectedEmailIds: parsed.data.selectedEmailIds,
-            selectedDocumentIds: parsed.data.selectedDocumentIds,
-            stream: {
-              onReady: ({ runId, messageId, requestId }) =>
-                writeSseData(res, {
-                  type: "ready",
-                  runId,
-                  threadId,
-                  messageId,
-                  requestId,
-                }),
-              onDelta: ({ runId, messageId, delta }) =>
-                writeSseData(res, {
-                  type: "delta",
-                  runId,
-                  messageId,
-                  delta,
-                }),
-              onCompleted: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "completed",
-                  runId,
-                  message,
-                }),
-              onCancelled: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "cancelled",
-                  runId,
-                  message,
-                }),
-              onError: ({ runId, code, message, requestId }) =>
-                writeSseData(res, {
-                  type: "error",
-                  runId,
-                  code,
-                  message,
-                  requestId,
-                }),
-            },
-          });
-        } catch (error) {
-          const appError = toAppError(error);
-          writeSseData(res, {
-            type: "error",
-            code: appError.code,
-            message: appError.message,
-            requestId: res.getHeader("x-request-id") || "unknown",
-          });
-        } finally {
-          res.end();
-        }
+				try {
+					await ghostwriterService.sendMessage({
+						jobId,
+						threadId,
+						content: parsed.data.content,
+						attachments: parsed.data.attachments,
+						selectedNoteIds: parsed.data.selectedNoteIds,
+						selectedEmailIds: parsed.data.selectedEmailIds,
+						selectedDocumentIds: parsed.data.selectedDocumentIds,
+						stream: {
+							onReady: ({ runId, messageId, requestId }) =>
+								writeSseData(res, {
+									type: "ready",
+									runId,
+									threadId,
+									messageId,
+									requestId,
+								}),
+							onDelta: ({ runId, messageId, delta }) =>
+								writeSseData(res, {
+									type: "delta",
+									runId,
+									messageId,
+									delta,
+								}),
+							onCompleted: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "completed",
+									runId,
+									message,
+								}),
+							onCancelled: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "cancelled",
+									runId,
+									message,
+								}),
+							onError: ({ runId, code, message, requestId }) =>
+								writeSseData(res, {
+									type: "error",
+									runId,
+									code,
+									message,
+									requestId,
+								}),
+						},
+					});
+				} catch (error) {
+					const appError = toAppError(error);
+					writeSseData(res, {
+						type: "error",
+						code: appError.code,
+						message: appError.message,
+						requestId: res.getHeader("x-request-id") || "unknown",
+					});
+				} finally {
+					res.end();
+				}
 
-        return;
-      }
+				return;
+			}
 
-      const result = await ghostwriterService.sendMessage({
-        jobId,
-        threadId,
-        content: parsed.data.content,
-        attachments: parsed.data.attachments,
-        selectedNoteIds: parsed.data.selectedNoteIds,
-        selectedEmailIds: parsed.data.selectedEmailIds,
-        selectedDocumentIds: parsed.data.selectedDocumentIds,
-      });
+			const result = await ghostwriterService.sendMessage({
+				jobId,
+				threadId,
+				content: parsed.data.content,
+				attachments: parsed.data.attachments,
+				selectedNoteIds: parsed.data.selectedNoteIds,
+				selectedEmailIds: parsed.data.selectedEmailIds,
+				selectedDocumentIds: parsed.data.selectedDocumentIds,
+			});
 
-      ok(res, {
-        userMessage: result.userMessage,
-        assistantMessage: result.assistantMessage,
-        runId: result.runId,
-      });
-    });
-  }),
+			ok(res, {
+				userMessage: result.userMessage,
+				assistantMessage: result.assistantMessage,
+				runId: result.runId,
+			});
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/threads/:threadId/runs/:runId/cancel",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const threadId = req.params.threadId;
-    const runId = req.params.runId;
+	"/threads/:threadId/runs/:runId/cancel",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const threadId = req.params.threadId;
+		const runId = req.params.runId;
 
-    if (!threadId || !runId) {
-      return fail(res, badRequest("Missing thread id or run id"));
-    }
+		if (!threadId || !runId) {
+			return fail(res, badRequest("Missing thread id or run id"));
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      const result = await ghostwriterService.cancelRun({
-        jobId,
-        threadId,
-        runId,
-      });
+		await runWithRequestContext({ jobId }, async () => {
+			const result = await ghostwriterService.cancelRun({
+				jobId,
+				threadId,
+				runId,
+			});
 
-      ok(res, result);
-    });
-  }),
+			ok(res, result);
+		});
+	}),
 );
 
 ghostwriterRouter.post(
-  "/threads/:threadId/messages/:assistantMessageId/regenerate",
-  asyncRoute(async (req, res) => {
-    const jobId = getJobId(req);
-    const threadId = req.params.threadId;
-    const assistantMessageId = req.params.assistantMessageId;
+	"/threads/:threadId/messages/:assistantMessageId/regenerate",
+	asyncRoute(async (req, res) => {
+		const jobId = getJobId(req);
+		const threadId = req.params.threadId;
+		const assistantMessageId = req.params.assistantMessageId;
 
-    if (!threadId || !assistantMessageId) {
-      return fail(res, badRequest("Missing thread id or message id"));
-    }
+		if (!threadId || !assistantMessageId) {
+			return fail(res, badRequest("Missing thread id or message id"));
+		}
 
-    const parsed = regenerateSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return fail(
-        res,
-        badRequest(parsed.error.message, parsed.error.flatten()),
-      );
-    }
+		const parsed = regenerateSchema.safeParse(req.body ?? {});
+		if (!parsed.success) {
+			return fail(
+				res,
+				badRequest(parsed.error.message, parsed.error.flatten()),
+			);
+		}
 
-    await runWithRequestContext({ jobId }, async () => {
-      if (parsed.data.stream) {
-        setupSse(res, {
-          cacheControl: "no-cache, no-transform",
-          flushHeaders: true,
-        });
+		await runWithRequestContext({ jobId }, async () => {
+			if (parsed.data.stream) {
+				setupSse(res, {
+					cacheControl: "no-cache, no-transform",
+					flushHeaders: true,
+				});
 
-        try {
-          await ghostwriterService.regenerateMessage({
-            jobId,
-            threadId,
-            assistantMessageId,
-            selectedNoteIds: parsed.data.selectedNoteIds,
-            selectedEmailIds: parsed.data.selectedEmailIds,
-            selectedDocumentIds: parsed.data.selectedDocumentIds,
-            stream: {
-              onReady: ({ runId, messageId, requestId }) =>
-                writeSseData(res, {
-                  type: "ready",
-                  runId,
-                  threadId,
-                  messageId,
-                  requestId,
-                }),
-              onDelta: ({ runId, messageId, delta }) =>
-                writeSseData(res, {
-                  type: "delta",
-                  runId,
-                  messageId,
-                  delta,
-                }),
-              onCompleted: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "completed",
-                  runId,
-                  message,
-                }),
-              onCancelled: ({ runId, message }) =>
-                writeSseData(res, {
-                  type: "cancelled",
-                  runId,
-                  message,
-                }),
-              onError: ({ runId, code, message, requestId }) =>
-                writeSseData(res, {
-                  type: "error",
-                  runId,
-                  code,
-                  message,
-                  requestId,
-                }),
-            },
-          });
-        } catch (error) {
-          const appError = toAppError(error);
-          writeSseData(res, {
-            type: "error",
-            code: appError.code,
-            message: appError.message,
-            requestId: res.getHeader("x-request-id") || "unknown",
-          });
-        } finally {
-          res.end();
-        }
+				try {
+					await ghostwriterService.regenerateMessage({
+						jobId,
+						threadId,
+						assistantMessageId,
+						selectedNoteIds: parsed.data.selectedNoteIds,
+						selectedEmailIds: parsed.data.selectedEmailIds,
+						selectedDocumentIds: parsed.data.selectedDocumentIds,
+						stream: {
+							onReady: ({ runId, messageId, requestId }) =>
+								writeSseData(res, {
+									type: "ready",
+									runId,
+									threadId,
+									messageId,
+									requestId,
+								}),
+							onDelta: ({ runId, messageId, delta }) =>
+								writeSseData(res, {
+									type: "delta",
+									runId,
+									messageId,
+									delta,
+								}),
+							onCompleted: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "completed",
+									runId,
+									message,
+								}),
+							onCancelled: ({ runId, message }) =>
+								writeSseData(res, {
+									type: "cancelled",
+									runId,
+									message,
+								}),
+							onError: ({ runId, code, message, requestId }) =>
+								writeSseData(res, {
+									type: "error",
+									runId,
+									code,
+									message,
+									requestId,
+								}),
+						},
+					});
+				} catch (error) {
+					const appError = toAppError(error);
+					writeSseData(res, {
+						type: "error",
+						code: appError.code,
+						message: appError.message,
+						requestId: res.getHeader("x-request-id") || "unknown",
+					});
+				} finally {
+					res.end();
+				}
 
-        return;
-      }
+				return;
+			}
 
-      const result = await ghostwriterService.regenerateMessage({
-        jobId,
-        threadId,
-        assistantMessageId,
-        selectedNoteIds: parsed.data.selectedNoteIds,
-        selectedEmailIds: parsed.data.selectedEmailIds,
-        selectedDocumentIds: parsed.data.selectedDocumentIds,
-      });
+			const result = await ghostwriterService.regenerateMessage({
+				jobId,
+				threadId,
+				assistantMessageId,
+				selectedNoteIds: parsed.data.selectedNoteIds,
+				selectedEmailIds: parsed.data.selectedEmailIds,
+				selectedDocumentIds: parsed.data.selectedDocumentIds,
+			});
 
-      ok(res, result);
-    });
-  }),
+			ok(res, result);
+		});
+	}),
 );

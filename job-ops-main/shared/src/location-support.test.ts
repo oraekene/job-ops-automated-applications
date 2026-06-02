@@ -1,103 +1,103 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatCountryLabel,
-  getAdzunaCountryCode,
-  getCompatibleSourcesForCountry,
-  isGlassdoorCountry,
-  isSourceAllowedForCountry,
-  isUkCountry,
-  normalizeCountryKey,
-  SUPPORTED_COUNTRY_KEYS,
+	formatCountryLabel,
+	getAdzunaCountryCode,
+	getCompatibleSourcesForCountry,
+	isGlassdoorCountry,
+	isSourceAllowedForCountry,
+	isUkCountry,
+	normalizeCountryKey,
+	SUPPORTED_COUNTRY_KEYS,
 } from "./location-support";
 
 describe("location-support", () => {
-  it("normalizes country aliases", () => {
-    expect(normalizeCountryKey("UK")).toBe("united kingdom");
-    expect(normalizeCountryKey("us")).toBe("united states");
-    expect(normalizeCountryKey("usa")).toBe("united states");
-    expect(normalizeCountryKey("czech republic")).toBe("czechia");
-  });
+	it("normalizes country aliases", () => {
+		expect(normalizeCountryKey("UK")).toBe("united kingdom");
+		expect(normalizeCountryKey("us")).toBe("united states");
+		expect(normalizeCountryKey("usa")).toBe("united states");
+		expect(normalizeCountryKey("czech republic")).toBe("czechia");
+	});
 
-  it("formats country labels", () => {
-    expect(formatCountryLabel("united kingdom")).toBe("United Kingdom");
-    expect(formatCountryLabel("usa/ca")).toBe("USA/CA");
-    expect(formatCountryLabel("south korea")).toBe("South Korea");
-  });
+	it("formats country labels", () => {
+		expect(formatCountryLabel("united kingdom")).toBe("United Kingdom");
+		expect(formatCountryLabel("usa/ca")).toBe("USA/CA");
+		expect(formatCountryLabel("south korea")).toBe("South Korea");
+	});
 
-  it("keeps supported country keys unique and canonical", () => {
-    expect(SUPPORTED_COUNTRY_KEYS).toContain("united kingdom");
-    expect(SUPPORTED_COUNTRY_KEYS).toContain("united states");
-    expect(SUPPORTED_COUNTRY_KEYS).toContain("russia");
-    expect(SUPPORTED_COUNTRY_KEYS).toContain("worldwide");
-    expect(SUPPORTED_COUNTRY_KEYS).not.toContain("uk");
-    expect(SUPPORTED_COUNTRY_KEYS).not.toContain("us");
-  });
+	it("keeps supported country keys unique and canonical", () => {
+		expect(SUPPORTED_COUNTRY_KEYS).toContain("united kingdom");
+		expect(SUPPORTED_COUNTRY_KEYS).toContain("united states");
+		expect(SUPPORTED_COUNTRY_KEYS).toContain("russia");
+		expect(SUPPORTED_COUNTRY_KEYS).toContain("worldwide");
+		expect(SUPPORTED_COUNTRY_KEYS).not.toContain("uk");
+		expect(SUPPORTED_COUNTRY_KEYS).not.toContain("us");
+	});
 
-  it("treats only united kingdom as UK country", () => {
-    expect(isUkCountry("united kingdom")).toBe(true);
-    expect(isUkCountry("UK")).toBe(true);
-    expect(isUkCountry("worldwide")).toBe(false);
-    expect(isUkCountry("usa/ca")).toBe(false);
-    expect(isUkCountry("united states")).toBe(false);
-  });
+	it("treats only united kingdom as UK country", () => {
+		expect(isUkCountry("united kingdom")).toBe(true);
+		expect(isUkCountry("UK")).toBe(true);
+		expect(isUkCountry("worldwide")).toBe(false);
+		expect(isUkCountry("usa/ca")).toBe(false);
+		expect(isUkCountry("united states")).toBe(false);
+	});
 
-  it("applies source compatibility rules by country", () => {
-    expect(isSourceAllowedForCountry("gradcracker", "united kingdom")).toBe(
-      true,
-    );
-    expect(isSourceAllowedForCountry("ukvisajobs", "uk")).toBe(true);
-    expect(isSourceAllowedForCountry("jobindex", "denmark")).toBe(true);
-    expect(isSourceAllowedForCountry("gradcracker", "united states")).toBe(
-      false,
-    );
-    expect(isSourceAllowedForCountry("ukvisajobs", "worldwide")).toBe(false);
-    expect(isSourceAllowedForCountry("jobindex", "united kingdom")).toBe(false);
-    expect(isSourceAllowedForCountry("indeed", "united states")).toBe(true);
-    expect(isSourceAllowedForCountry("linkedin", "worldwide")).toBe(true);
-    expect(isSourceAllowedForCountry("glassdoor", "united states")).toBe(true);
-    expect(isSourceAllowedForCountry("glassdoor", "japan")).toBe(false);
-    expect(isSourceAllowedForCountry("adzuna", "united states")).toBe(true);
-    expect(isSourceAllowedForCountry("adzuna", "japan")).toBe(false);
-    expect(isSourceAllowedForCountry("naukri", "india")).toBe(true);
-    expect(isSourceAllowedForCountry("naukri", "united kingdom")).toBe(false);
-    expect(isSourceAllowedForCountry("startupjobs", "united states")).toBe(
-      true,
-    );
-    expect(isSourceAllowedForCountry("startupjobs", "worldwide")).toBe(true);
-    expect(isSourceAllowedForCountry("indeed", "russia")).toBe(false);
-    expect(isSourceAllowedForCountry("startupjobs", "russia")).toBe(true);
-  });
+	it("applies source compatibility rules by country", () => {
+		expect(isSourceAllowedForCountry("gradcracker", "united kingdom")).toBe(
+			true,
+		);
+		expect(isSourceAllowedForCountry("ukvisajobs", "uk")).toBe(true);
+		expect(isSourceAllowedForCountry("jobindex", "denmark")).toBe(true);
+		expect(isSourceAllowedForCountry("gradcracker", "united states")).toBe(
+			false,
+		);
+		expect(isSourceAllowedForCountry("ukvisajobs", "worldwide")).toBe(false);
+		expect(isSourceAllowedForCountry("jobindex", "united kingdom")).toBe(false);
+		expect(isSourceAllowedForCountry("indeed", "united states")).toBe(true);
+		expect(isSourceAllowedForCountry("linkedin", "worldwide")).toBe(true);
+		expect(isSourceAllowedForCountry("glassdoor", "united states")).toBe(true);
+		expect(isSourceAllowedForCountry("glassdoor", "japan")).toBe(false);
+		expect(isSourceAllowedForCountry("adzuna", "united states")).toBe(true);
+		expect(isSourceAllowedForCountry("adzuna", "japan")).toBe(false);
+		expect(isSourceAllowedForCountry("naukri", "india")).toBe(true);
+		expect(isSourceAllowedForCountry("naukri", "united kingdom")).toBe(false);
+		expect(isSourceAllowedForCountry("startupjobs", "united states")).toBe(
+			true,
+		);
+		expect(isSourceAllowedForCountry("startupjobs", "worldwide")).toBe(true);
+		expect(isSourceAllowedForCountry("indeed", "russia")).toBe(false);
+		expect(isSourceAllowedForCountry("startupjobs", "russia")).toBe(true);
+	});
 
-  it("filters incompatible sources while preserving compatible order", () => {
-    expect(
-      getCompatibleSourcesForCountry(
-        [
-          "gradcracker",
-          "indeed",
-          "glassdoor",
-          "ukvisajobs",
-          "jobindex",
-          "adzuna",
-          "naukri",
-          "startupjobs",
-          "linkedin",
-        ],
-        "united states",
-      ),
-    ).toEqual(["indeed", "glassdoor", "adzuna", "startupjobs", "linkedin"]);
-  });
+	it("filters incompatible sources while preserving compatible order", () => {
+		expect(
+			getCompatibleSourcesForCountry(
+				[
+					"gradcracker",
+					"indeed",
+					"glassdoor",
+					"ukvisajobs",
+					"jobindex",
+					"adzuna",
+					"naukri",
+					"startupjobs",
+					"linkedin",
+				],
+				"united states",
+			),
+		).toEqual(["indeed", "glassdoor", "adzuna", "startupjobs", "linkedin"]);
+	});
 
-  it("supports glassdoor only in explicitly supported countries", () => {
-    expect(isGlassdoorCountry("united kingdom")).toBe(true);
-    expect(isGlassdoorCountry("uk")).toBe(true);
-    expect(isGlassdoorCountry("usa")).toBe(true);
-    expect(isGlassdoorCountry("japan")).toBe(false);
-    expect(isGlassdoorCountry("worldwide")).toBe(false);
-  });
+	it("supports glassdoor only in explicitly supported countries", () => {
+		expect(isGlassdoorCountry("united kingdom")).toBe(true);
+		expect(isGlassdoorCountry("uk")).toBe(true);
+		expect(isGlassdoorCountry("usa")).toBe(true);
+		expect(isGlassdoorCountry("japan")).toBe(false);
+		expect(isGlassdoorCountry("worldwide")).toBe(false);
+	});
 
-  it("maps adzuna country keys to adzuna api country codes", () => {
-    expect(getAdzunaCountryCode("united states")).toBe("us");
-    expect(getAdzunaCountryCode("UK")).toBe("gb");
-    expect(getAdzunaCountryCode("japan")).toBeNull();
-  });
+	it("maps adzuna country keys to adzuna api country codes", () => {
+		expect(getAdzunaCountryCode("united states")).toBe("us");
+		expect(getAdzunaCountryCode("UK")).toBe("gb");
+		expect(getAdzunaCountryCode("japan")).toBeNull();
+	});
 });
