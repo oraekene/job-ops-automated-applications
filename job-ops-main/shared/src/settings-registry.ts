@@ -9,9 +9,17 @@ import {
   CHAT_STYLE_MANUAL_LANGUAGE_VALUES,
   type ChatStyleLanguageMode,
   type ChatStyleManualLanguage,
+  LLM_PROVIDER_VALUES,
+  LLM_PURPOSE_VALUES,
+  type LlmProviderId,
+  type LlmPurpose,
+  type LlmPurposeApiKeys,
+  type LlmPurposeOverrides,
   PDF_RENDERER_VALUES,
   type PdfRenderer,
   type ResumeProjectsSettings,
+  TYPST_THEME_VALUES,
+  type TypstTheme,
 } from "./types/settings";
 
 function parseNonEmptyStringOrNull(raw: string | undefined): string | null {
@@ -91,6 +99,182 @@ function serializeNullableJsonArray(
 function serializeBitBool(value: boolean | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   return value ? "1" : "0";
+}
+
+function isLlmPurpose(value: string): value is LlmPurpose {
+  return (LLM_PURPOSE_VALUES as readonly string[]).includes(value);
+}
+
+function isLlmProviderId(value: string): value is LlmProviderId {
+  return (LLM_PROVIDER_VALUES as readonly string[]).includes(value);
+}
+
+function parseTypstThemeOrNull(raw: string | undefined): TypstTheme | null {
+  if (!raw) return null;
+  if (!(TYPST_THEME_VALUES as readonly string[]).includes(raw)) return null;
+  return raw as TypstTheme;
+}
+
+function serializeTypstTheme(
+  value: TypstTheme | string | null | undefined,
+): string | null {
+  if (typeof value !== "string" || !value) return null;
+  if (!(TYPST_THEME_VALUES as readonly string[]).includes(value)) return null;
+  return value;
+}
+
+function parseJsonObjectOrNull(
+  raw: string | undefined,
+): Record<string, unknown> | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null;
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function parseLlmPurposeApiKeysOrNull(
+  raw: string | undefined,
+): LlmPurposeApiKeys | null {
+  const obj = parseJsonObjectOrNull(raw);
+  if (obj === null) return null;
+  const result: LlmPurposeApiKeys = {};
+  for (const key of Object.keys(obj)) {
+    if (!isLlmPurpose(key)) return null;
+    const value = obj[key];
+    if (value === null) continue;
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    result[key] = trimmed;
+  }
+  return result;
+}
+
+function serializeLlmPurposeApiKeys(
+  value: LlmPurposeApiKeys | null | undefined,
+): string | null {
+  if (!value) return null;
+  const filtered: LlmPurposeApiKeys = {};
+  let hasValid = false;
+  for (const purpose of LLM_PURPOSE_VALUES) {
+    const v = value[purpose];
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (!trimmed) continue;
+    filtered[purpose] = trimmed;
+    hasValid = true;
+  }
+  return hasValid ? JSON.stringify(filtered) : null;
+}
+
+function parseLlmPurposeOverridesOrNull(
+  raw: string | undefined,
+): LlmPurposeOverrides | null {
+  const obj = parseJsonObjectOrNull(raw);
+  if (obj === null) return null;
+  const result: LlmPurposeOverrides = {};
+  for (const key of Object.keys(obj)) {
+    if (!isLlmPurpose(key)) return null;
+    const rawValue = obj[key];
+    if (rawValue === null) continue;
+    if (typeof rawValue !== "object" || Array.isArray(rawValue)) return null;
+    const entry: {
+      provider?: LlmProviderId;
+      baseUrl?: string;
+      model?: string;
+    } = {};
+    let entryHasValid = false;
+    const entryObj = rawValue as Record<string, unknown>;
+    if (Object.hasOwn(entryObj, "provider")) {
+      const v = entryObj.provider;
+      if (v === null) {
+        // null clears the provider override
+      } else if (typeof v !== "string") {
+        return null;
+      } else {
+        const normalized = v.trim().toLowerCase().replace(/-/g, "_");
+        if (normalized) {
+          if (!isLlmProviderId(normalized)) return null;
+          entry.provider = normalized;
+          entryHasValid = true;
+        }
+      }
+    }
+    if (Object.hasOwn(entryObj, "baseUrl")) {
+      const v = entryObj.baseUrl;
+      if (v === null) {
+        // null clears the baseUrl override
+      } else if (typeof v !== "string") {
+        return null;
+      } else {
+        const trimmed = v.trim();
+        if (trimmed) {
+          entry.baseUrl = trimmed;
+          entryHasValid = true;
+        }
+      }
+    }
+    if (Object.hasOwn(entryObj, "model")) {
+      const v = entryObj.model;
+      if (v === null) {
+        // null clears the model override
+      } else if (typeof v !== "string") {
+        return null;
+      } else {
+        const trimmed = v.trim();
+        if (trimmed) {
+          entry.model = trimmed;
+          entryHasValid = true;
+        }
+      }
+    }
+    if (entryHasValid) {
+      result[key] = entry;
+    }
+  }
+  return result;
+}
+
+function serializeLlmPurposeOverrides(
+  value: LlmPurposeOverrides | null | undefined,
+): string | null {
+  if (!value) return null;
+  const filtered: LlmPurposeOverrides = {};
+  let hasValid = false;
+  for (const purpose of LLM_PURPOSE_VALUES) {
+    const v = value[purpose];
+    if (typeof v !== "object" || v === null) continue;
+    let entryHasValid = false;
+    const entry: {
+      provider?: LlmProviderId;
+      baseUrl?: string;
+      model?: string;
+    } = {};
+    if (typeof v.provider === "string" && v.provider.trim()) {
+      entry.provider = v.provider.trim() as LlmProviderId;
+      entryHasValid = true;
+    }
+    if (typeof v.baseUrl === "string" && v.baseUrl.trim()) {
+      entry.baseUrl = v.baseUrl.trim();
+      entryHasValid = true;
+    }
+    if (typeof v.model === "string" && v.model.trim()) {
+      entry.model = v.model.trim();
+      entryHasValid = true;
+    }
+    if (entryHasValid) {
+      filtered[purpose] = entry;
+      hasValid = true;
+    }
+  }
+  return hasValid ? JSON.stringify(filtered) : null;
 }
 
 function createEnumParser<const TValues extends readonly [string, ...string[]]>(
@@ -212,6 +396,30 @@ export const settingsRegistry = {
     serialize: (value: string | null | undefined): string | null =>
       value ?? null,
   },
+  llmPurposeApiKeys: {
+    kind: "typed" as const,
+    envKey: "LLM_PURPOSE_API_KEYS",
+    schema: z.record(z.string().nullable()),
+    default: (): LlmPurposeApiKeys => ({}),
+    parse: parseLlmPurposeApiKeysOrNull,
+    serialize: serializeLlmPurposeApiKeys,
+  },
+  llmPurposeOverrides: {
+    kind: "typed" as const,
+    envKey: "LLM_PURPOSE_OVERRIDES",
+    schema: z.record(
+      z
+        .object({
+          provider: z.string().nullable().optional(),
+          baseUrl: z.string().nullable().optional(),
+          model: z.string().nullable().optional(),
+        })
+        .nullable(),
+    ),
+    default: (): LlmPurposeOverrides => ({}),
+    parse: parseLlmPurposeOverridesOrNull,
+    serialize: serializeLlmPurposeOverrides,
+  },
   pipelineWebhookUrl: {
     kind: "typed" as const,
     schema: z.string().trim().max(2000),
@@ -263,6 +471,14 @@ export const settingsRegistry = {
     parse: parsePdfRendererOrNull,
     serialize: (value: PdfRenderer | null | undefined): string | null =>
       value ?? null,
+  },
+  typstTheme: {
+    kind: "typed" as const,
+    envKey: "TYPST_THEME",
+    schema: z.enum(TYPST_THEME_VALUES),
+    default: (): TypstTheme => "classic",
+    parse: parseTypstThemeOrNull,
+    serialize: serializeTypstTheme,
   },
   ukvisajobsMaxJobs: {
     kind: "typed" as const,
@@ -726,7 +942,7 @@ export const settingsRegistry = {
     envKey: "AUTO_APP_ENABLED",
     schema: z.boolean(),
     default: (): boolean => false,
-    parse: (v: string | undefined): boolean => v === "true" || v === true,
+    parse: (v: string | undefined): boolean => v === "true",
     serialize: (v: boolean | null | undefined): string | null =>
       v ? "true" : "false",
   },
