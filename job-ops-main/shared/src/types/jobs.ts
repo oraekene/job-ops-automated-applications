@@ -392,3 +392,13 @@ export interface UpdateJobNoteInput {
   title: string;
   content: string;
 }
+
+export interface JobDocument {
+  id: string;
+  jobId: string;
+  fileName: string;
+  mediaType: string | null;
+  byteSize: number;
+  createdAt: string;
+  updatedAt: string;
+}
