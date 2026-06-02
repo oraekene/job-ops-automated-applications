@@ -69,7 +69,9 @@ ChartContainer.displayName = "ChartContainer";
 export const ChartTooltip = RechartsTooltip;
 
 export type ChartTooltipContentProps = React.ComponentPropsWithoutRef<"div"> &
-  Pick<TooltipProps<number, string>, "active" | "payload" | "label"> & {
+  Partial<
+    Pick<TooltipProps<number, string>, "active" | "payload" | "label">
+  > & {
     indicator?: "dot" | "line" | "dashed";
     labelFormatter?: (value: unknown, payload: unknown[]) => React.ReactNode;
     formatter?: (
@@ -120,55 +122,66 @@ export const ChartTooltipContent = React.forwardRef<
           </div>
         ) : null}
         <div className="space-y-1">
-          {payload.map((item, index) => {
-            const dataKey = String(item.dataKey ?? item.name ?? "");
-            const configKey = nameKey ?? dataKey;
-            const entry = config[configKey] ?? config[dataKey];
-            const IndicatorIcon = entry?.icon;
-            const value = formatter
-              ? formatter(item.value, dataKey, item, index)
-              : item.value;
-            const labelText = entry?.label ?? item.name ?? dataKey;
-            const indicatorColor =
-              entry?.color ?? item.color ?? item.fill ?? "currentColor";
+          {payload.map(
+            (
+              item: {
+                dataKey?: string | number;
+                name?: string;
+                value?: number | string;
+                color?: string;
+                fill?: string;
+              },
+              index: number,
+            ) => {
+              const dataKey = String(item.dataKey ?? item.name ?? "");
+              const configKey = nameKey ?? dataKey;
+              const entry = config[configKey] ?? config[dataKey];
+              const IndicatorIcon = entry?.icon;
+              const value = formatter
+                ? formatter(item.value, dataKey, item, index)
+                : item.value;
+              const labelText = entry?.label ?? item.name ?? dataKey;
+              const indicatorColor =
+                entry?.color ?? item.color ?? item.fill ?? "currentColor";
 
-            return (
-              <div
-                key={`${dataKey}-${String(index)}`}
-                className="flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  {IndicatorIcon ? (
-                    <IndicatorIcon className="h-3.5 w-3.5" />
-                  ) : (
-                    <span
-                      className={cn(
-                        "inline-block",
-                        indicator === "dot" && "h-2 w-2 rounded-full",
-                        indicator === "line" && "h-0.5 w-3 rounded-full",
-                        indicator === "dashed" &&
-                          "h-0.5 w-3 rounded-full border border-dashed",
-                      )}
-                      style={{
-                        backgroundColor:
-                          indicator === "dot" || indicator === "line"
-                            ? indicatorColor
-                            : "transparent",
-                        borderColor:
-                          indicator === "dashed" ? indicatorColor : undefined,
-                      }}
-                    />
-                  )}
-                  <span>{labelText}</span>
+              return (
+                <div
+                  key={`${dataKey}-${String(index)}`}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    {IndicatorIcon ? (
+                      <IndicatorIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      <span
+                        className={cn(
+                          "inline-block",
+                          indicator === "dot" && "h-2 w-2 rounded-full",
+                          indicator === "line" && "h-0.5 w-3 rounded-full",
+                          indicator === "dashed" &&
+                            "h-0.5 w-3 rounded-full border border-dashed",
+                        )}
+                        style={{
+                          backgroundColor:
+                            indicator === "dot" || indicator === "line"
+                              ? indicatorColor
+                              : "transparent",
+                          borderColor:
+                            indicator === "dashed" ? indicatorColor : undefined,
+                        }}
+                      />
+                    )}
+                    <span>{labelText}</span>
+                  </div>
+                  <span className="font-semibold text-foreground">
+                    {typeof value === "number"
+                      ? value.toLocaleString()
+                      : (value as React.ReactNode)}
+                  </span>
                 </div>
-                <span className="font-semibold text-foreground">
-                  {typeof value === "number"
-                    ? value.toLocaleString()
-                    : (value as React.ReactNode)}
-                </span>
-              </div>
-            );
-          })}
+              );
+            },
+          )}
         </div>
       </div>
     );

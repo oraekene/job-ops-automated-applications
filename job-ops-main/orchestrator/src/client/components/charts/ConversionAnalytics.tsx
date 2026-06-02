@@ -331,9 +331,15 @@ export function ConversionAnalytics({
                     />
                     <Tooltip
                       cursor={{ fill: "var(--chart-1)", opacity: 0.3 }}
-                      content={({ active, payload }) => {
+                      content={({
+                        active,
+                        payload,
+                      }: {
+                        active?: boolean;
+                        payload?: Array<{ payload: FunnelStage }>;
+                      }) => {
                         if (!active || !payload?.length) return null;
-                        const data = payload[0].payload as FunnelStage;
+                        const data = payload[0].payload;
                         return (
                           <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs shadow-sm">
                             <div className="font-medium">{data.name}</div>
@@ -382,7 +388,7 @@ export function ConversionAnalytics({
                     axisLine={false}
                     tickMargin={8}
                     minTickGap={32}
-                    tickFormatter={(value) => {
+                    tickFormatter={(value: string | number) => {
                       const date = new Date(value);
                       return date.toLocaleDateString("en-GB", {
                         month: "short",
@@ -393,14 +399,22 @@ export function ConversionAnalytics({
                   <YAxis
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `${value.toFixed(0)}%`}
+                    tickFormatter={(value: number) => `${value.toFixed(0)}%`}
                     domain={[0, "auto"]}
                   />
                   <ChartTooltip
                     cursor={{ fill: "var(--chart-1)", opacity: 0.3 }}
-                    content={({ active, payload, label }) => {
+                    content={({
+                      active,
+                      payload,
+                      label,
+                    }: {
+                      active?: boolean;
+                      payload?: Array<{ payload: ConversionDataPoint }>;
+                      label?: unknown;
+                    }) => {
                       if (!active || !payload?.length) return null;
-                      const data = payload[0].payload as ConversionDataPoint;
+                      const data = payload[0].payload;
                       return (
                         <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs shadow-sm">
                           <div className="mb-2 text-[11px] font-medium text-muted-foreground">

@@ -400,7 +400,9 @@ export const TracerLinksPage: React.FC = () => {
                   tickLine={false}
                   tickMargin={8}
                   minTickGap={24}
-                  tickFormatter={(value) => formatDayLabel(String(value))}
+                  tickFormatter={(value: string | number) =>
+                    formatDayLabel(String(value))
+                  }
                 />
                 <YAxis axisLine={false} tickLine={false} width={30} />
                 <ChartTooltip
@@ -408,7 +410,9 @@ export const TracerLinksPage: React.FC = () => {
                   content={
                     <ChartTooltipContent
                       nameKey="clicks"
-                      labelFormatter={(value) => formatDayLabel(String(value))}
+                      labelFormatter={(value: unknown) =>
+                        formatDayLabel(String(value))
+                      }
                     />
                   }
                 />

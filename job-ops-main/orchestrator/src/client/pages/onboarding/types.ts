@@ -28,3 +28,5 @@ export type OnboardingStep = {
   complete: boolean;
   disabled: boolean;
 };
+
+export type BasicAuthChoice = "enable" | "skip" | null;

@@ -171,7 +171,7 @@ export function ApplicationsPerDayChart({
                 axisLine={false}
                 tickMargin={8}
                 minTickGap={32}
-                tickFormatter={(value) => {
+                tickFormatter={(value: string | number) => {
                   const date = new Date(value);
                   return date.toLocaleDateString("en-GB", {
                     month: "short",
@@ -185,7 +185,7 @@ export function ApplicationsPerDayChart({
                   <ChartTooltipContent
                     className="w-[160px]"
                     nameKey="applications"
-                    labelFormatter={(value) =>
+                    labelFormatter={(value: unknown) =>
                       new Date(value as string).toLocaleDateString("en-GB", {
                         month: "short",
                         day: "numeric",

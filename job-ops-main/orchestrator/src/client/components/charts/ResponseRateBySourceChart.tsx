@@ -222,7 +222,7 @@ export function ResponseRateBySourceChart({
                       domain={[0, xAxisMax]}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(v) => `${v}%`}
+                      tickFormatter={(v: number) => `${v}%`}
                       tick={{ fontSize: 11 }}
                     />
                     <YAxis
@@ -235,9 +235,15 @@ export function ResponseRateBySourceChart({
                     />
                     <Tooltip
                       cursor={{ fill: "var(--chart-2)", opacity: 0.15 }}
-                      content={({ active, payload }) => {
+                      content={({
+                        active,
+                        payload,
+                      }: {
+                        active?: boolean;
+                        payload?: Array<{ payload: SourceRateDataPoint }>;
+                      }) => {
                         if (!active || !payload?.length) return null;
-                        const d = payload[0].payload as SourceRateDataPoint;
+                        const d = payload[0].payload;
                         return (
                           <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs shadow-sm">
                             <div className="mb-1.5 font-medium">{d.source}</div>

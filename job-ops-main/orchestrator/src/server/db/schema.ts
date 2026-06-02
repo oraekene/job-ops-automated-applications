@@ -264,6 +264,32 @@ export const jobNotes = sqliteTable(
   }),
 );
 
+export const jobDocuments = sqliteTable(
+  "job_documents",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .default("tenant_default")
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    mediaType: text("media_type"),
+    byteSize: integer("byte_size").notNull(),
+    storagePath: text("storage_path").notNull(),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    jobUpdatedIndex: index("idx_job_documents_job_updated").on(
+      table.jobId,
+      table.updatedAt,
+    ),
+  }),
+);
+
 export const interviews = sqliteTable("interviews", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id")
@@ -343,6 +369,7 @@ export const jobChatThreads = sqliteTable(
     activeRootMessageId: text("active_root_message_id"),
     selectedNoteIds: text("selected_note_ids").notNull().default("[]"),
     selectedEmailIds: text("selected_email_ids").notNull().default("[]"),
+    selectedDocumentIds: text("selected_document_ids").notNull().default("[]"),
   },
   (table) => ({
     jobUpdatedIndex: index("idx_job_chat_threads_job_updated").on(
