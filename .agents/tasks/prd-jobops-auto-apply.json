@@ -1,0 +1,383 @@
+{
+  "version": 1,
+  "project": "JobOps Auto-Apply (Extension ↔ Orchestrator Integration)",
+  "overview": "Wire the existing Chrome extension to the orchestrator so that a user who has completed onboarding (profile, base resume, LLM key) can enable a one-click 'auto-apply' mode in the extension. The extension polls the orchestrator for a queue of auto-applicable jobs, opens each Greenhouse or Lever URL in its own tab, fills the form using real profile data and AI-generated screening answers from the orchestrator, and submits without a human review step. The orchestrator side replaces the existing stub implementations of prepJob and buildPayload, and exposes a queue + result-reporting pair of endpoints. This is a deliberate deviation from the v1 design spec, which required human review before submission.",
+  "goals": [
+    "Make the extension's doFill use the user's real profile, AI-answered screening questions, and tailored PDF instead of hardcoded John Doe data",
+    "Replace the stub prepJob with a real implementation that looks up the job by URL, returns the user profile, suitability score, and PDF freshness",
+    "Replace the stub buildPayload with a real implementation that calls Ghostwriter for screening answers and the existing PDF service for the tailored resume",
+    "Add a queue endpoint to the orchestrator that returns the next batch of auto-applicable jobs and a result endpoint the extension uses to report success/skip",
+    "Add a background service worker to the extension that polls the queue, opens each job in a new tab, triggers fill, and reports the result",
+    "Treat CAPTCHAs, MFA prompts, account-required modals, and unknown ATS pages as 'skipped' so the queue keeps moving"
+  ],
+  "nonGoals": [
+    "Supporting LinkedIn Easy Apply, Indeed, Workday, or any non-Greenhouse/non-Lever ATS in this round",
+    "Multi-profile support (one tenant, one profile)",
+    "Application analytics dashboard (re-use the existing application tracking view for the queue status)",
+    "Server-side ATS interaction via residential proxies / Camoufox",
+    "Notifications, scheduling, or any orchestration that runs when Chrome is closed",
+    "Stopping the queue for human review (explicitly: skip and continue)"
+  ],
+  "successMetrics": [
+    "With onboarding complete and a populated jobs table containing at least 3 Greenhouse URLs, enabling auto-apply in the extension results in 3 new rows in the applications table with status='submitted' within 5 minutes",
+    "A CAPTCHA or unknown-ATS page encountered during the run produces an applications row with status='skipped' and an errorMessage describing the blocker, and the queue continues to the next job",
+    "All 7 AGENTS.md CI-parity checks plus the extension's `check:types` and `test` pass with the new code in place"
+  ],
+  "openQuestions": [
+    "The base resume service may not exist as a single entry point — the implementation needs to discover whether tailored PDFs are produced by the rxresume service, a typst pipeline, or both, and pick whichever the user has configured",
+    "The existing suitability score is computed by an unknown service — prepJob needs to call into it via a stable function name that this PRD does not presuppose; the first iteration may need to add that function if it doesn't exist",
+    "The extension's `host_permissions` currently lists only `http://localhost:3005/*`; if the user later runs the orchestrator on a different host, the manifest must be updated (out of scope for this round)"
+  ],
+  "stack": {
+    "framework": "Express + Drizzle ORM (orchestrator), React 18 + Vite (extension UI)",
+    "hosting": "Local: orchestrator on http://localhost:3005, extension as unpacked Chrome MV3",
+    "database": "SQLite via Drizzle (existing)",
+    "auth": "Existing BasicAuth/JWT — no auth changes in this PRD",
+    "tenancy": "DEFAULT_TENANT_ID — single-tenant assumption for this round, multi-tenant scoping preserved in repository calls"
+  },
+  "routes": [
+    { "path": "GET /api/applications/prep", "name": "Application prep", "purpose": "Real implementation: looks up job by URL, returns profile + suitabilityScore + pdfFreshness" },
+    { "path": "POST /api/applications/payload", "name": "Application payload", "purpose": "Real implementation: Ghostwriter screening answers + tailored PDF + filled fields" },
+    { "path": "POST /api/applications/confirm", "name": "Application confirm", "purpose": "Unchanged — record successful submission" },
+    { "path": "GET /api/applications/pending", "name": "Pending applications", "purpose": "Unchanged — used by orchestrator UI" },
+    { "path": "GET /api/applications/queue", "name": "Auto-apply queue (NEW)", "purpose": "Returns next N auto-applicable jobs for the extension to process" },
+    { "path": "POST /api/applications/queue-result", "name": "Auto-apply queue result (NEW)", "purpose": "Extension reports submitted | skipped + reason for a given job" },
+    { "path": "GET /api/applications/queue/status", "name": "Queue status (NEW)", "purpose": "Returns counts (pending, submitted today, skipped today) for the extension popup" }
+  ],
+  "uiNotes": [
+    "Extension popup: add a single 'Auto-apply' toggle, a 'Queue: N pending' indicator, and a 'Last run' timestamp. Reuse the existing popup layout and the `chrome.storage.sync` settings pattern.",
+    "Action panel in the content script: when running in autonomous mode, the panel should not show the 'Fill Application' button — instead it should show the job title, a 'Submitting automatically in 3s...' countdown, and a 'Cancel' button. After submit detection, the panel shows the result and the tab is closed.",
+    "Orchestrator UI: no new page required. The existing applications tracking view (or pending list) should be the place to see queue progress; this is wired via the new /queue/status endpoint and a thin new component on the existing page."
+  ],
+  "dataModel": [
+    { "entity": "applications", "fields": ["id", "tenantId", "jobId", "atsType", "status", "fieldPayload", "screeningAnswers", "customQuestions", "confirmationId", "submittedAt", "screenshotPath", "errorMessage", "createdAt", "updatedAt"], "notes": "Existing table — no schema changes in this PRD. errorMessage is repurposed to record skip reasons." },
+    { "entity": "jobs", "fields": ["auto_applicable", "last_application_id"], "notes": "Existing columns from the design spec — verify they exist in schema; if missing, US-009 adds them." }
+  ],
+  "importFormat": {
+    "description": "Not applicable — extension reads from the orchestrator via the new queue endpoint. Existing onboarding imports the resume via rxresume or a manual upload step.",
+    "example": {}
+  },
+  "rules": [
+    "The extension only acts on a job URL whose host matches greenhouse.io or lever.co — anything else is logged and skipped",
+    "A CAPTCHA, MFA, or 'Sign in to apply' blocker detected by the content script → mark skipped, do not retry, continue queue",
+    "Auto-apply is a per-user toggle stored in `chrome.storage.sync` under `autoApply.enabled`; default false. The orchestrator has a separate `autoApplicationEnabled` setting (already exists in the settings registry) which gates whether the queue endpoint returns anything at all",
+    "Each queue item is processed in at most one attempt per /queue poll — if the extension crashes or Chrome closes mid-fill, the application row remains in 'preparing' and is retried on the next poll cycle (idempotency is enforced by `applications.jobId` UNIQUE lookup before create)",
+    "The extension uploads the tailored PDF using DataTransfer to bypass file-input restrictions; if the upload fails, the entire job is marked skipped, not submitted"
+  ],
+  "qualityGates": [
+    "cd job-ops-main && ./orchestrator/node_modules/.bin/biome ci .",
+    "cd job-ops-main && npm run check:types:shared",
+    "cd job-ops-main && npm --workspace orchestrator run check:types",
+    "cd job-ops-main && npm --workspace gradcracker-extractor run check:types",
+    "cd job-ops-main && npm --workspace ukvisajobs-extractor run check:types",
+    "cd job-ops-main && npm --workspace orchestrator run build:client",
+    "cd job-ops-main && npm --workspace orchestrator run test:run",
+    "cd job-ops-main && npm --workspace extension run check:types",
+    "cd job-ops-main && npm --workspace extension run test"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Verify current orchestrator + extension build state",
+      "status": "open",
+      "dependsOn": [],
+      "description": "As a developer, I want to confirm the repo is in a known-good state before I start changing code, so that any failures in later stories are attributable to the new code and not the baseline.",
+      "acceptanceCriteria": [
+        "All 9 quality gates pass on the current `main` branch with no code changes",
+        "Example: `./orchestrator/node_modules/.bin/biome ci .` reports 0 errors",
+        "Negative case: if any gate fails, US-001 is incomplete — the developer must fix the baseline or document the failure as a precondition for the rest of the PRD"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "prepJob: look up job by URL",
+      "status": "open",
+      "dependsOn": ["US-001"],
+      "description": "As the extension, when I call `GET /api/applications/prep?url=...&ats=...` I want the orchestrator to find the job in the `jobs` table by its URL, so the panel can show real job data instead of an empty result.",
+      "acceptanceCriteria": [
+        "`applicationService.prepJob` queries the `jobs` table for a row whose `url` (or, for greenhouse/lever, a deterministic URL pattern derived from the canonical job id) matches the query parameter",
+        "If a job is found, `result.exists === true` and `result.job` contains `{ id, title, employer, suitabilityScore: 0, status }` (suitabilityScore filled by US-004)",
+        "If no job is found, `result.exists === false` and no error is thrown — the extension's existing offline panel takes over",
+        "Example: `prepJob('https://boards.greenhouse.io/acme/jobs/12345', 'greenhouse')` returns `exists: true` when a row with that URL exists in the test DB",
+        "Negative case: `prepJob('https://example.com/not-a-job', 'greenhouse')` returns `exists: false` (not a 404) so the extension's offline panel still shows"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "prepJob: include user profile",
+      "status": "open",
+      "dependsOn": ["US-002"],
+      "description": "As the extension, I want prepJob to return the user's profile fields the form filler needs, so I can show them in the panel and pass them into doFill.",
+      "acceptanceCriteria": [
+        "`result.profile` contains `{ first_name, last_name, email, phone, linkedin_url, current_company }` read from the existing profile service (`getProfile` from `@server/services/profile`)",
+        "If the user has not completed onboarding (profile is empty or missing required fields), `result.profile` is `null` and the extension surfaces 'Complete onboarding first' instead of trying to fill",
+        "Example: with a populated profile, `result.profile.first_name === 'Ada'`",
+        "Negative case: with no profile in the DB, `result.profile === null` (not a thrown error)"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "prepJob: include suitabilityScore",
+      "status": "open",
+      "dependsOn": ["US-002"],
+      "description": "As the extension, I want to show a fit score in the action panel, so the user can see which jobs are worth applying to.",
+      "acceptanceCriteria": [
+        "prepJob calls the existing suitability scoring function (to be discovered — likely in `@server/services/suitability` or similar) with the job and the active profile, and assigns the integer result to `result.job.suitabilityScore`",
+        "If no scoring function is found, add a minimal `suitabilityService.scoreJob(jobId, profileId): number` that returns 0 and is wired in. Document the discovery outcome in the story commit message",
+        "Example: a job with a strong skill match returns `suitabilityScore: 85`",
+        "Negative case: a job with no profile loaded returns `suitabilityScore: 0` (not NaN, not undefined)"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "prepJob: include pdfFreshness",
+      "status": "open",
+      "dependsOn": ["US-002"],
+      "description": "As the extension, I want to know whether a tailored PDF already exists for this job and when it was last generated, so I can warn the user if it's stale.",
+      "acceptanceCriteria": [
+        "`result.hasTailoredPdf` is `true` if a tailored PDF exists for the jobId in the existing PDF service / storage; `result.pdfFreshness` is the ISO timestamp of when it was last generated",
+        "If no PDF exists, `result.hasTailoredPdf === false` and `result.pdfFreshness === undefined` (buildPayload will generate one)",
+        "Example: a job with a PDF generated 2 hours ago returns `hasTailoredPdf: true, pdfFreshness: '2026-06-02T12:00:00.000Z'`",
+        "Negative case: a job with no PDF yet returns `hasTailoredPdf: false, pdfFreshness: undefined`"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "buildPayload: fetch profile and call Ghostwriter for screening answers",
+      "status": "open",
+      "dependsOn": ["US-003"],
+      "description": "As the extension, when I call `POST /api/applications/payload` I want screening answers generated by the existing Ghostwriter service, so the form filler has real answers for custom questions.",
+      "acceptanceCriteria": [
+        "`buildPayload` resolves the profile via `getProfile` and the job via the repository, then calls the existing Ghostwriter service to generate a `{ question: string, answer: string }` map for the supplied `customQuestions` array",
+        "The Ghostwriter call uses the same multi-tenant context, LLM config, and redaction rules as the manual job workflow",
+        "The returned `result.screening_answers` is the question→answer map, never empty for non-empty `customQuestions`",
+        "Example: payload with `customQuestions: ['Years of React experience?']` returns `screening_answers: { 'Years of React experience?': '5 years...' }`",
+        "Negative case: payload with `customQuestions: []` returns `screening_answers: {}` (not an error)"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "buildPayload: generate tailored PDF and return base64",
+      "status": "open",
+      "dependsOn": ["US-006"],
+      "description": "As the extension, I want the orchestrator to return a base64-encoded tailored PDF in the payload, so the extension can upload it to the ATS via a DataTransfer without needing direct filesystem access.",
+      "acceptanceCriteria": [
+        "buildPayload uses the existing PDF service (rxresume or typst pipeline — discover and document which) to produce a tailored PDF for the job and profile",
+        "The PDF bytes are base64-encoded and returned as `result.resume_pdf_base64`; `result.resume_filename` is `'resume_<jobId>.pdf'`",
+        "If PDF generation fails, buildPayload throws a 422 (`UNPROCESSABLE_ENTITY`) so the extension can mark the job skipped",
+        "Example: a successful build returns a base64 string of > 1000 characters and a non-empty filename",
+        "Negative case: a job that fails PDF generation returns HTTP 422 and the extension's content script catches it and marks the job skipped"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "buildPayload: assemble fields and persist application row",
+      "status": "open",
+      "dependsOn": ["US-007"],
+      "description": "As the extension, I want the payload to include every field the ATS drivers expect, so the form filler can call a single endpoint and get everything back.",
+      "acceptanceCriteria": [
+        "`result.fields` is populated from the profile (first_name, last_name, email, phone, linkedin_url, current_company) plus the settings-registry values for `autoApplicationSalaryRequirement`",
+        "`result.cover_letter` is generated by Ghostwriter (or a deterministic fallback to `autoApplicationDefaultCoverLetter` if no LLM is configured) and is non-empty",
+        "The application row is created with status='ready_for_review' and `fieldPayload`/`screeningAnswers`/`customQuestions` populated as JSON",
+        "Example: a payload returns `fields: { first_name: 'Ada', ..., salary: '$140,000' }` and `cover_letter: 'I am excited...'`",
+        "Negative case: a payload with no profile throws 404 (`NOT_FOUND`) so the extension surfaces 'Complete onboarding first'"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Add `auto_applicable` and `last_application_id` to jobs table if missing",
+      "status": "open",
+      "dependsOn": ["US-001"],
+      "description": "As the orchestrator, I want a per-job flag for 'this job is in the auto-apply pool' and a pointer to the most recent application, so the queue endpoint can return the right jobs and the UI can show history.",
+      "acceptanceCriteria": [
+        "Verify both columns exist in `orchestrator/src/server/db/schema.ts` on the `jobs` table. If they don't, add them with appropriate Drizzle types and create a migration",
+        "Add a Drizzle migration under `orchestrator/src/server/db/migrations/` that adds the columns with safe defaults (NULL or false) and is idempotent",
+        "Example: running the migration against a fresh DB succeeds; running it again is a no-op",
+        "Negative case: a developer running the migration on a DB that already has the columns sees a clear 'column already exists' message and exits 0"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "Add GET /api/applications/queue endpoint",
+      "status": "open",
+      "dependsOn": ["US-009"],
+      "description": "As the extension's background service worker, I want an endpoint that returns the next N auto-applicable jobs, so I have a list to process without needing to query the full jobs table.",
+      "acceptanceCriteria": [
+        "Mount `GET /api/applications/queue?limit=N` on the existing `applicationRouter`",
+        "Returns `{ jobs: [{ id, url, atsType, title, employer, suitabilityScore }] }` filtered by `auto_applicable = true`, ordered by `suitabilityScore DESC` and `createdAt ASC`",
+        "Respects the `autoApplicationEnabled` setting in the settings registry — when false, returns `{ jobs: [] }`",
+        "Default limit is 10, max is 50; values outside the range are clamped",
+        "Example: with 3 Greenhouse jobs marked `auto_applicable`, the response is `{ jobs: [<3 items>] }`",
+        "Negative case: with no `auto_applicable` jobs, response is `{ jobs: [] }`; with `autoApplicationEnabled=false`, response is also `{ jobs: [] }`"
+      ]
+    },
+    {
+      "id": "US-011",
+      "title": "Add POST /api/applications/queue-result endpoint",
+      "status": "open",
+      "dependsOn": ["US-010"],
+      "description": "As the extension, I want an endpoint to report the result of a queue item, so the orchestrator can record success or skip + reason and the UI can show progress.",
+      "acceptanceCriteria": [
+        "Mount `POST /api/applications/queue-result` accepting `{ jobId, atsType, outcome: 'submitted' | 'skipped' | 'failed', reason?: string, confirmationId?: string, submittedAt?: string, fieldSnapshot?: object, answersSnapshot?: object, screenshotBase64?: string }`",
+        "On `outcome: 'submitted'`, behaves like the existing confirm endpoint (creates/updates an application row with status='submitted')",
+        "On `outcome: 'skipped'` or `outcome: 'failed'`, creates/updates an application row with the matching status and stores `reason` in `errorMessage`",
+        "Returns the standard `{ ok: true, data: { applicationId, newStatus }, meta: { requestId } }` envelope",
+        "Example: reporting `outcome: 'submitted'` for jobId `abc` returns `newStatus: 'submitted'`",
+        "Negative case: reporting an unknown jobId returns 404 `NOT_FOUND`"
+      ]
+    },
+    {
+      "id": "US-012",
+      "title": "Add GET /api/applications/queue/status endpoint",
+      "status": "open",
+      "dependsOn": ["US-010"],
+      "description": "As the extension popup, I want a quick status endpoint so I can show 'Queue: N pending, M applied today' without re-querying the full jobs table.",
+      "acceptanceCriteria": [
+        "Returns `{ counts: { pending: number, submittedToday: number, skippedToday: number, failedToday: number }, lastRunAt: string | null }`",
+        "`pending` is the count of jobs with `auto_applicable=true` and no application row in 'submitted' or 'skipped' state",
+        "All 'today' counts are applications with `updatedAt >= startOfToday(UTC)` and the matching status",
+        "`lastRunAt` is the most recent `updatedAt` across all application rows (any status)",
+        "Example: with 5 pending jobs and 2 submitted today, response is `{ counts: { pending: 5, submittedToday: 2, ... } }`",
+        "Negative case: with no data at all, response is `{ counts: { pending: 0, submittedToday: 0, skippedToday: 0, failedToday: 0 }, lastRunAt: null }`"
+      ]
+    },
+    {
+      "id": "US-013",
+      "title": "Extension doFill: call buildPayload instead of hardcoded data",
+      "status": "open",
+      "dependsOn": ["US-008"],
+      "description": "As the extension, I want doFill to call the real buildPayload endpoint and use the returned fields, cover letter, screening answers, and PDF, so the form is filled with the user's real data.",
+      "acceptanceCriteria": [
+        "Replace the hardcoded `profile` object in `packages/extension/src/content-script.ts` with a call to `api.buildPayload(jobId, atsType, customQuestions)`",
+        "Pass the returned `fields` map to the ATS driver's label map and `screening_answers` to the custom-question fill step",
+        "On a 5xx or 422 response, the panel shows 'Skipped: <reason>' and `chrome.runtime.sendMessage` reports the result to the background service worker (US-016)",
+        "Example: a successful buildPayload call returns fields and the ATS driver fills 7 inputs and 1 textarea",
+        "Negative case: a 404 from buildPayload (no profile) is caught, the panel shows 'Complete onboarding first', and the result is reported as skipped"
+      ]
+    },
+    {
+      "id": "US-014",
+      "title": "Extension doFill: upload the tailored PDF via DataTransfer",
+      "status": "open",
+      "dependsOn": ["US-013"],
+      "description": "As the extension, I want to upload the base64 PDF from buildPayload as a real file in the ATS's resume upload input, so the user's actual tailored resume is attached.",
+      "acceptanceCriteria": [
+        "Add a helper `uploadResume(input: HTMLInputElement, base64: string, filename: string): boolean` in `packages/extension/src/drivers/shared/file-injector.ts` that decodes base64 to bytes, builds a `File` with the right MIME, attaches it via `DataTransfer`, and dispatches `change`",
+        "Call it from doFill with `payload.resume_pdf_base64` and `payload.resume_filename`",
+        "If `uploadResume` returns false (no file input found, or DataTransfer unavailable), the job is marked skipped with reason 'no resume upload input'",
+        "Example: Greenhouse application with a `[data-qa='resume-upload-input']` is filled with the PDF",
+        "Negative case: Lever application with no `input[type=file]` is skipped, the panel shows the reason, and the queue continues"
+      ]
+    },
+    {
+      "id": "US-015",
+      "title": "Extension background service worker: poll /queue",
+      "status": "open",
+      "dependsOn": ["US-010"],
+      "description": "As the extension, I want a background service worker that polls the queue endpoint and dispatches each job, so the user can enable auto-apply once and walk away.",
+      "acceptanceCriteria": [
+        "Add a `background.ts` poll loop that calls `api.getQueue(10)` every 30 seconds while `autoApply.enabled` is true in `chrome.storage.sync`",
+        "The poll stops automatically when the toggle is off or when there are no pending items",
+        "Each queue item is dispatched to a new tab via `chrome.tabs.create({ url, active: false })` with a `jobId` query parameter so the content script knows what to fill",
+        "Example: with 3 jobs in the queue and the toggle on, 3 tabs are opened within 30 seconds of enabling the toggle",
+        "Negative case: with the toggle off, no GET /queue calls are made (verified via network panel)"
+      ]
+    },
+    {
+      "id": "US-016",
+      "title": "Extension background: report results and close tabs",
+      "status": "open",
+      "dependsOn": ["US-014", "US-015"],
+      "description": "As the extension, I want each completed job to report its result to the orchestrator and the tab to close, so the queue moves forward without human intervention.",
+      "acceptanceCriteria": [
+        "The content script posts a `{ kind: 'jobops:result', jobId, outcome, reason?, confirmationId?, fieldSnapshot?, answersSnapshot? }` message to the background when the application submits, is skipped, or fails",
+        "The background forwards the message to `api.reportQueueResult(...)` and then `chrome.tabs.remove(tabId)` for the originating tab",
+        "If the message handler receives no result within 120 seconds, the background treats the job as failed and reports `{ outcome: 'failed', reason: 'timeout' }`",
+        "Example: a successful submit posts a result with `outcome: 'submitted'`, the orchestrator records it, and the tab closes within 2 seconds",
+        "Negative case: a tab that crashes mid-fill triggers the 120s timeout path and the job is reported as failed"
+      ]
+    },
+    {
+      "id": "US-017",
+      "title": "Extension: detect CAPTCHAs, MFA, and unknown ATS as skipped",
+      "status": "open",
+      "dependsOn": ["US-016"],
+      "description": "As the extension, I want to detect common blockers and skip the job instead of looping or breaking the queue, so a single bad job doesn't stop auto-apply.",
+      "acceptanceCriteria": [
+        "Add a `detectBlocker(): { blocked: boolean, reason?: string }` helper that looks for: reCAPTCHA iframes (`iframe[src*='recaptcha']`), hCaptcha iframes, Greenhouse 'Sign in to apply' modal, Lever 'Sign in' modal, and any visible MFA prompt (`text*: 'verify your identity'`)",
+        "If a blocker is detected during page stability wait, the content script posts `{ kind: 'jobops:result', outcome: 'skipped', reason: '<detected>' }` and the background records it",
+        "If the ATS detector returns 'unknown' for a non-greenhouse/lever URL, the same skip path is taken with reason 'unknown ATS'",
+        "Example: navigating to a Greenhouse URL that triggers a CAPTCHA panel results in an application row with status='skipped' and errorMessage='reCAPTCHA detected'",
+        "Negative case: a normal Greenhouse form without a blocker proceeds to the fill step"
+      ]
+    },
+    {
+      "id": "US-018",
+      "title": "Extension popup: add Auto-apply toggle and queue status",
+      "status": "open",
+      "dependsOn": ["US-012"],
+      "description": "As the user, I want a single toggle in the extension popup to enable auto-apply, plus a small live status indicator, so I know what the extension is doing.",
+      "acceptanceCriteria": [
+        "Add an 'Auto-apply' checkbox to the existing popup in `packages/extension/src/popup/index.tsx` that stores `autoApply.enabled` in `chrome.storage.sync`",
+        "Add a status line that shows 'Queue: N pending · M applied today' by calling `api.getQueueStatus()` every 10 seconds while the popup is open",
+        "When the toggle is flipped on, the background's poll loop starts within 1 second; when flipped off, it stops within 1 second",
+        "Example: toggling on with 3 jobs in the queue updates the status line to 'Queue: 3 pending · 0 applied today'",
+        "Negative case: with the orchestrator unreachable, the status line shows 'Server offline' and the toggle persists locally (it just doesn't have a queue to process)"
+      ]
+    },
+    {
+      "id": "US-019",
+      "title": "Orchestrator unit tests for prepJob",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a developer, I want unit tests covering prepJob's contract so future refactors don't silently break the extension.",
+      "acceptanceCriteria": [
+        "Add `orchestrator/src/server/services/applications.test.ts` (or extend the existing test file if one is present) with cases for: job found + profile present, job found + no profile, job not found, no profile in DB, PDF present + freshness, PDF absent",
+        "Tests use the existing in-memory SQLite test DB pattern (matches the other service tests)",
+        "Example: a test for the 'job found + profile present' case asserts `result.exists === true`, `result.profile.first_name === <test value>`, and `result.hasTailoredPdf === true`",
+        "Negative case: a test for 'no job found' asserts `result.exists === false` and does NOT throw"
+      ]
+    },
+    {
+      "id": "US-020",
+      "title": "Orchestrator unit tests for buildPayload",
+      "status": "open",
+      "dependsOn": ["US-008"],
+      "description": "As a developer, I want unit tests covering buildPayload's contract and failure paths so the extension's error handling can rely on the documented shapes.",
+      "acceptanceCriteria": [
+        "Add tests for: full success (profile, screening answers, PDF all present), no profile → 404, PDF generation failure → 422, empty `customQuestions` returns empty `screening_answers`",
+        "Ghostwriter and the PDF service are mocked at the module boundary using the existing test mocking pattern (vi.mock or jest.mock — match what neighbouring tests use)",
+        "Example: a success test asserts `result.fields.first_name === 'Ada'`, `result.cover_letter.length > 0`, and `result.resume_pdf_base64.length > 1000`",
+        "Negative case: a no-profile test asserts the call throws an error with `code === 'NOT_FOUND'`"
+      ]
+    },
+    {
+      "id": "US-021",
+      "title": "Extension vitest for queue runner and blocker detection",
+      "status": "open",
+      "dependsOn": ["US-015", "US-016", "US-017"],
+      "description": "As a developer, I want vitest coverage for the new background logic and the blocker detector, so the autonomous loop doesn't regress silently.",
+      "acceptanceCriteria": [
+        "Add `packages/extension/src/background.test.ts` with cases for: polling starts on toggle on, polling stops on toggle off, queue result is forwarded to api.reportQueueResult, tab is closed after result, 120s timeout reports 'failed'",
+        "Add `packages/extension/src/detect-blocker.test.ts` with cases for: reCAPTCHA iframe detected, MFA prompt detected, unknown ATS skipped, clean Greenhouse page not flagged",
+        "Tests use the existing `jsdom` setup from `packages/extension/vitest.config.ts`",
+        "Example: a test injects a `<iframe src='https://www.google.com/recaptcha/...'>`, runs `detectBlocker()`, and asserts `blocked === true` with `reason === 'reCAPTCHA detected'`",
+        "Negative case: a test with a clean Greenhouse DOM asserts `blocked === false`"
+      ]
+    },
+    {
+      "id": "US-022",
+      "title": "End-to-end smoke: docs + README updates for the autonomous flow",
+      "status": "open",
+      "dependsOn": ["US-013", "US-018"],
+      "description": "As a new user, I want a short doc and an updated extension README that describe the autonomous flow, how to enable it, and the queue semantics, so I don't have to read the source to use the feature.",
+      "acceptanceCriteria": [
+        "Add a new doc page under `job-ops-main/docs-site/docs/features/auto-application.md` (or update the existing one if it's already there) covering: prerequisites (onboarding complete), how to enable auto-apply, what the queue does, how to read the status, what gets skipped and why, and how to disable",
+        "Update `packages/extension/README.md` (or create it) with the same flow plus the manifest install instructions and the localhost:3005 host permission",
+        "The doc follows the existing 'What it is / Why it exists / How to use it / Common problems / Related pages' structure from AGENTS.md",
+        "Example: the doc includes a 'How to use it' section with numbered steps and a copy-pasteable command for loading the unpacked extension",
+        "Negative case: a Common problems section explicitly lists 'Why is my job being skipped?' with the three most common reasons and how to check"
+      ]
+    }
+  ]
+}
