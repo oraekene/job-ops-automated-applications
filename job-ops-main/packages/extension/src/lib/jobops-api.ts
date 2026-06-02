@@ -14,7 +14,7 @@ export interface PrepResponse {
     phone: string;
     linkedin_url: string;
     current_company: string;
-  };
+  } | null;
   hasTailoredPdf: boolean;
   pdfFreshness?: string;
   applicationId: string | null;

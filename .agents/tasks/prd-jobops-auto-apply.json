@@ -276,7 +276,7 @@
     {
       "id": "US-003",
       "title": "prepJob: include user profile",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-002"
       ],

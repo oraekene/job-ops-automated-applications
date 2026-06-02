@@ -1,7 +1,18 @@
 import { notFound } from "@infra/errors";
 import { logger } from "@infra/logger";
+import type { ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
 import { getJobByUrl } from "../repositories/jobs";
+import { getProfile } from "./profile";
+
+export interface PrepProfile {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  linkedin_url: string;
+  current_company: string;
+}
 
 export interface PrepResult {
   exists: boolean;
@@ -12,14 +23,7 @@ export interface PrepResult {
     suitabilityScore: number;
     status: string;
   };
-  profile?: {
-    first_name: string;
-    last_name: string;
-    email: string;
-    phone: string;
-    linkedin_url: string;
-    current_company: string;
-  };
+  profile?: PrepProfile | null;
   hasTailoredPdf: boolean;
   pdfFreshness?: string;
   applicationId: string | null;
@@ -56,6 +60,8 @@ export const applicationService = {
       };
     }
 
+    const profile = await loadPrepProfile();
+
     return {
       exists: true,
       job: {
@@ -65,6 +71,7 @@ export const applicationService = {
         suitabilityScore: job.suitabilityScore ?? 0,
         status: job.status,
       },
+      profile,
       hasTailoredPdf: false,
       applicationId: null,
     };
@@ -153,4 +160,47 @@ async function findJobByUrl(url: string) {
   if (normalized === url) return null;
 
   return getJobByUrl(normalized);
+}
+
+async function loadPrepProfile(): Promise<PrepProfile | null> {
+  try {
+    const profile = await getProfile();
+    return mapProfileToPrepProfile(profile);
+  } catch (error) {
+    logger.warn(
+      "Skipping profile in prep response: getProfile failed (onboarding likely incomplete)",
+      { error },
+    );
+    return null;
+  }
+}
+
+function mapProfileToPrepProfile(profile: ResumeProfile): PrepProfile | null {
+  const name = (profile.basics?.name ?? "").trim();
+  const email = (profile.basics?.email ?? "").trim();
+
+  if (!name || !email) {
+    return null;
+  }
+
+  const nameParts = name.split(/\s+/);
+  const first_name = nameParts[0] ?? "";
+  const last_name = nameParts.slice(1).join(" ");
+
+  return {
+    first_name,
+    last_name,
+    email,
+    phone: profile.basics?.phone ?? "",
+    linkedin_url: findLinkedInUrl(profile.basics?.profiles),
+    current_company: profile.sections?.experience?.items?.[0]?.company ?? "",
+  };
+}
+
+function findLinkedInUrl(
+  profiles: Array<{ network?: string; url?: string }> | undefined,
+): string {
+  if (!profiles) return "";
+  const linkedIn = profiles.find((p) => /linkedin/i.test(p.network ?? ""));
+  return linkedIn?.url ?? "";
 }
