@@ -210,14 +210,28 @@
         "US-024",
         "US-025",
         "US-026",
-        "US-027"
+        "US-027",
+        "US-028"
       ],
       "description": "As a developer, I want to confirm the repo is in a known-good state before I start changing code, so that any failures in later stories are attributable to the new code and not the baseline. This story runs after the 5 baseline-fix stories above.",
       "acceptanceCriteria": [
         "All 9 quality gates pass on the current `main` branch with no code changes (other than the baseline fixes from US-023..US-027)",
         "Example: `biome ci .` reports 0 errors, `npm run check:types:shared` exits 0, `npm --workspace orchestrator run check:types` exits 0, all extractor typechecks exit 0, `npm --workspace orchestrator run build:client` exits 0, `npm --workspace orchestrator run test:run` exits 0, extension `check:types` and `test` exit 0",
-        "Negative case: if any gate fails, US-001 is incomplete — fix the regression or document it as a precondition for the rest of the PRD"
-      ]
+        "Negative case: if any gate fails, US-001 is incomplete — fix the regression or document it as a precondition for the rest of the PRD",
+        "KNOWN PRECONDITION: this story is currently blocked by the tsc errors above. US-028 is a prerequisite to make these gates pass."
+      ],
+      "blockers": [
+        "22 pre-existing tsc errors in orchestrator (down from 127 after env fix):",
+        " - 7 binding element implicit any (recharts Tooltip destructure)",
+        " - 7 parameter implicit any (recharts/Callback type annotations)",
+        " - 2 @shared/types missing exports: ApplicationStatus, APPLICATION_STATUSES",
+        " - 1 BasicAuthChoice not exported from onboarding/types",
+        " - 1 selectedDocumentIds field missing on ghostwriter row type",
+        " - 1 jobDocuments table not declared in orchestrator/src/server/db/schema.ts",
+        " - 2 Tooltip props missing label/payload/active (recharts API change)",
+        " - 1 drizzle insert overload mismatch in ghostwriter.ts:215"
+      ],
+      "envFixApplied": "re-installed framer-motion@12.34.3 + motion-dom + motion-utils to fix corrupted node_modules (was missing dist/es/index.mjs and dist/index.d.ts). Removed empty orchestrator/node_modules/react-hook-form so tsc walks up to root. Result: 127 -> 22 tsc errors."
     },
     {
       "id": "US-002",
@@ -554,6 +568,19 @@
         "The doc follows the existing 'What it is / Why it exists / How to use it / Common problems / Related pages' structure from AGENTS.md",
         "Example: the doc includes a 'How to use it' section with numbered steps and a copy-pasteable command for loading the unpacked extension",
         "Negative case: a Common problems section explicitly lists 'Why is my job being skipped?' with the three most common reasons and how to check"
+      ]
+    },
+    {
+      "id": "US-028",
+      "title": "Fix 22 pre-existing TypeScript errors in orchestrator",
+      "status": "open",
+      "dependsOn": [],
+      "description": "After US-027 (biome green) the next step is to make orchestrator tsc pass. 22 errors remain, all in existing code (not new from US-027). Many are implicit-any in callback params and destructured bindings. A few are missing exports or schema fields that need to be added to @shared/types or orchestrator/src/server/db/schema.ts.",
+      "acceptanceCriteria": [
+        "npm --workspace orchestrator run check:types exits 0 (no tsc errors)",
+        "Each fix is minimal: add a type annotation, add an export, or add a schema field — no behavioral changes",
+        "biome ci . still exits 0 after the fixes (no new lint errors introduced)",
+        "Negative case: reintroducing any one of the original 22 errors re-makes tsc fail"
       ]
     }
   ]
