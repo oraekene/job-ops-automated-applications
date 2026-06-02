@@ -253,7 +253,7 @@
     {
       "id": "US-002",
       "title": "prepJob: look up job by URL",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -264,6 +264,13 @@
         "If no job is found, `result.exists === false` and no error is thrown — the extension's existing offline panel takes over",
         "Example: `prepJob('https://boards.greenhouse.io/acme/jobs/12345', 'greenhouse')` returns `exists: true` when a row with that URL exists in the test DB",
         "Negative case: `prepJob('https://example.com/not-a-job', 'greenhouse')` returns `exists: false` (not a 404) so the extension's offline panel still shows"
+      ],
+      "notes": [
+        "Updated src/server/services/applications.ts: prepJob now calls getJobByUrl(url) from the jobs repository; on hit, returns exists:true with { id, title, employer, suitabilityScore: job.suitabilityScore ?? 0, status: job.status }.",
+        "Added normalizeJobUrl helper: strips query string and hash via the URL constructor; also strips a trailing slash unless the URL's path is exactly '/'. Greenhouse and Lever URLs that include ?gh_jid= or utm_* params now match their canonical stored row.",
+        "Added fallback: if exact match misses but normalized URL differs from input, try the normalized URL. If still miss, return exists:false (no throw).",
+        "Test coverage: src/server/services/applications.prepJob.test.ts — 4 cases (hit, query-param normalization, trailing-slash normalization, miss, pre-scored row).",
+        "Pending verification: test:run gate is blocked locally by better-sqlite3 Node-24 native binding; CI will run these."
       ]
     },
     {

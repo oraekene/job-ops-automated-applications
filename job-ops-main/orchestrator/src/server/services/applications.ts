@@ -1,6 +1,7 @@
 import { notFound } from "@infra/errors";
 import { logger } from "@infra/logger";
 import { applicationRepository } from "../repositories/applications";
+import { getJobByUrl } from "../repositories/jobs";
 
 export interface PrepResult {
   exists: boolean;
@@ -45,9 +46,25 @@ export interface ConfirmInput {
 }
 
 export const applicationService = {
-  async prepJob(_url: string, _atsType: string): Promise<PrepResult> {
+  async prepJob(url: string, _atsType: string): Promise<PrepResult> {
+    const job = await findJobByUrl(url);
+    if (!job) {
+      return {
+        exists: false,
+        hasTailoredPdf: false,
+        applicationId: null,
+      };
+    }
+
     return {
-      exists: false,
+      exists: true,
+      job: {
+        id: job.id,
+        title: job.title,
+        employer: job.employer,
+        suitabilityScore: job.suitabilityScore ?? 0,
+        status: job.status,
+      },
       hasTailoredPdf: false,
       applicationId: null,
     };
@@ -108,3 +125,32 @@ export const applicationService = {
     return applicationRepository.findPending();
   },
 };
+
+/**
+ * Normalize a job URL for comparison. Strips the URL fragment, query string,
+ * and trailing slash so that variant forms of the same canonical URL
+ * (e.g. `?gh_jid=12345` query params on a Greenhouse URL) match the stored row.
+ */
+function normalizeJobUrl(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    parsed.search = "";
+    const normalized = parsed.toString();
+    return normalized.endsWith("/") && parsed.pathname !== "/"
+      ? normalized.slice(0, -1)
+      : normalized;
+  } catch {
+    return raw;
+  }
+}
+
+async function findJobByUrl(url: string) {
+  const direct = await getJobByUrl(url);
+  if (direct) return direct;
+
+  const normalized = normalizeJobUrl(url);
+  if (normalized === url) return null;
+
+  return getJobByUrl(normalized);
+}
