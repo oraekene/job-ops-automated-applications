@@ -6,35 +6,35 @@ import { renderHookWithQueryClient } from "../test/renderWithQueryClient";
 import { useRescoreJob } from "./useRescoreJob";
 
 vi.mock("../api", () => ({
-	rescoreJob: vi.fn(),
+  rescoreJob: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
-	toast: {
-		success: vi.fn(),
-		error: vi.fn(),
-	},
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 describe("useRescoreJob", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-	it("rescoring updates the job and shows a toast", async () => {
-		const onJobUpdated = vi.fn().mockResolvedValue(undefined);
-		vi.mocked(api.rescoreJob).mockResolvedValue({} as any);
+  it("rescoring updates the job and shows a toast", async () => {
+    const onJobUpdated = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(api.rescoreJob).mockResolvedValue({} as any);
 
-		const { result } = renderHookWithQueryClient(() =>
-			useRescoreJob(onJobUpdated),
-		);
+    const { result } = renderHookWithQueryClient(() =>
+      useRescoreJob(onJobUpdated),
+    );
 
-		await act(async () => {
-			await result.current.rescoreJob("job-1");
-		});
+    await act(async () => {
+      await result.current.rescoreJob("job-1");
+    });
 
-		expect(api.rescoreJob).toHaveBeenCalledWith("job-1");
-		expect(onJobUpdated).toHaveBeenCalled();
-		expect(toast.success).toHaveBeenCalledWith("Match recalculated");
-	});
+    expect(api.rescoreJob).toHaveBeenCalledWith("job-1");
+    expect(onJobUpdated).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith("Match recalculated");
+  });
 });

@@ -4,13 +4,13 @@ import { InMemoryJobQueue } from "./job-queue-memory";
 let activeJobQueue: JobQueue = new InMemoryJobQueue();
 
 export function getJobQueue(): JobQueue {
-	return activeJobQueue;
+  return activeJobQueue;
 }
 
 export function setJobQueue(queue: JobQueue): void {
-	activeJobQueue = queue;
+  activeJobQueue = queue;
 }
 
 export function __resetJobQueueForTests(): void {
-	activeJobQueue = new InMemoryJobQueue();
+  activeJobQueue = new InMemoryJobQueue();
 }

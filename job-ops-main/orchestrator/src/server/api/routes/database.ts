@@ -10,23 +10,23 @@ export const databaseRouter = Router();
  * DELETE /api/database - Clear all data from the database
  */
 databaseRouter.delete("/", async (_req: Request, res: Response) => {
-	try {
-		if (isDemoMode()) {
-			return sendDemoBlocked(
-				res,
-				"Clearing the database is disabled in the public demo.",
-				{ route: "DELETE /api/database" },
-			);
-		}
+  try {
+    if (isDemoMode()) {
+      return sendDemoBlocked(
+        res,
+        "Clearing the database is disabled in the public demo.",
+        { route: "DELETE /api/database" },
+      );
+    }
 
-		const result = clearDatabase();
+    const result = clearDatabase();
 
-		ok(res, {
-			message: "Database cleared",
-			jobsDeleted: result.jobsDeleted,
-			runsDeleted: result.runsDeleted,
-		});
-	} catch (error) {
-		fail(res, toAppError(error));
-	}
+    ok(res, {
+      message: "Database cleared",
+      jobsDeleted: result.jobsDeleted,
+      runsDeleted: result.runsDeleted,
+    });
+  } catch (error) {
+    fail(res, toAppError(error));
+  }
 });

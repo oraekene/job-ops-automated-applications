@@ -16,120 +16,120 @@ import { hydrateJobPdfFreshness, requireJob, toJobsRouteError } from "./shared";
 export const jobsApplicationRouter = Router();
 
 jobsApplicationRouter.post(
-	"/:id/check-sponsor",
-	async (req: Request, res: Response) => {
-		try {
-			const job = await requireJob(req.params.id);
+  "/:id/check-sponsor",
+  async (req: Request, res: Response) => {
+    try {
+      const job = await requireJob(req.params.id);
 
-			if (!job.employer) {
-				return fail(res, badRequest("Job has no employer name"));
-			}
+      if (!job.employer) {
+        return fail(res, badRequest("Job has no employer name"));
+      }
 
-			const sponsorResults = await visaSponsors.searchSponsors(job.employer, {
-				limit: 10,
-				minScore: 50,
-			});
+      const sponsorResults = await visaSponsors.searchSponsors(job.employer, {
+        limit: 10,
+        minScore: 50,
+      });
 
-			const { sponsorMatchScore, sponsorMatchNames } =
-				visaSponsors.calculateSponsorMatchSummary(sponsorResults);
+      const { sponsorMatchScore, sponsorMatchNames } =
+        visaSponsors.calculateSponsorMatchSummary(sponsorResults);
 
-			const updatedJob = await jobsRepo.updateJob(job.id, {
-				sponsorMatchScore: sponsorMatchScore,
-				sponsorMatchNames: sponsorMatchNames ?? undefined,
-			});
+      const updatedJob = await jobsRepo.updateJob(job.id, {
+        sponsorMatchScore: sponsorMatchScore,
+        sponsorMatchNames: sponsorMatchNames ?? undefined,
+      });
 
-			if (!updatedJob) {
-				return fail(res, notFound("Job not found"));
-			}
+      if (!updatedJob) {
+        return fail(res, notFound("Job not found"));
+      }
 
-			if (sponsorMatchScore >= 50 && sponsorResults.length > 0) {
-				void trackServerProductEvent(
-					"sponsor_match_found",
-					{
-						match_score: sponsorMatchScore,
-						match_count: sponsorResults.length,
-					},
-					{
-						requestOrigin: resolveRequestOrigin(req),
-						urlPath: "/visa-sponsors",
-					},
-				);
-			}
+      if (sponsorMatchScore >= 50 && sponsorResults.length > 0) {
+        void trackServerProductEvent(
+          "sponsor_match_found",
+          {
+            match_score: sponsorMatchScore,
+            match_count: sponsorResults.length,
+          },
+          {
+            requestOrigin: resolveRequestOrigin(req),
+            urlPath: "/visa-sponsors",
+          },
+        );
+      }
 
-			ok(res, {
-				...(await hydrateJobPdfFreshness(updatedJob)),
-				matchResults: sponsorResults.slice(0, 5).map((r) => ({
-					name: r.sponsor.organisationName,
-					score: r.score,
-				})),
-			});
-		} catch (error) {
-			fail(res, toJobsRouteError(error));
-		}
-	},
+      ok(res, {
+        ...(await hydrateJobPdfFreshness(updatedJob)),
+        matchResults: sponsorResults.slice(0, 5).map((r) => ({
+          name: r.sponsor.organisationName,
+          score: r.score,
+        })),
+      });
+    } catch (error) {
+      fail(res, toJobsRouteError(error));
+    }
+  },
 );
 
 jobsApplicationRouter.post(
-	"/:id/apply",
-	async (req: Request, res: Response) => {
-		try {
-			if (isDemoMode()) {
-				const updatedJob = await simulateApplyJob(req.params.id);
-				return okWithMeta(res, await hydrateJobPdfFreshness(updatedJob), {
-					simulated: true,
-				});
-			}
+  "/:id/apply",
+  async (req: Request, res: Response) => {
+    try {
+      if (isDemoMode()) {
+        const updatedJob = await simulateApplyJob(req.params.id);
+        return okWithMeta(res, await hydrateJobPdfFreshness(updatedJob), {
+          simulated: true,
+        });
+      }
 
-			const job = await requireJob(req.params.id);
+      const job = await requireJob(req.params.id);
 
-			const appliedAtDate = new Date();
-			const appliedAt = appliedAtDate.toISOString();
+      const appliedAtDate = new Date();
+      const appliedAt = appliedAtDate.toISOString();
 
-			transitionStage(
-				job.id,
-				"applied",
-				Math.floor(appliedAtDate.getTime() / 1000),
-				{
-					eventLabel: "Applied",
-					actor: "system",
-				},
-				null,
-			);
+      transitionStage(
+        job.id,
+        "applied",
+        Math.floor(appliedAtDate.getTime() / 1000),
+        {
+          eventLabel: "Applied",
+          actor: "system",
+        },
+        null,
+      );
 
-			const updatedJob = await jobsRepo.updateJob(job.id, {
-				status: "applied",
-				appliedAt,
-			});
+      const updatedJob = await jobsRepo.updateJob(job.id, {
+        status: "applied",
+        appliedAt,
+      });
 
-			if (updatedJob) {
-				void trackCanonicalActivationEvent(
-					"application_marked_applied",
-					{
-						source: "jobs_apply_route",
-						had_pdf: Boolean(updatedJob.pdfPath),
-						tracer_links_enabled: Boolean(updatedJob.tracerLinksEnabled),
-						sponsor_match_found:
-							typeof updatedJob.sponsorMatchScore === "number" &&
-							updatedJob.sponsorMatchScore >= 50,
-					},
-					{
-						occurredAt: appliedAtDate,
-						requestOrigin: resolveRequestOrigin(req),
-						urlPath: "/jobs",
-					},
-				);
-				notifyJobCompleteWebhook(updatedJob).catch((error) => {
-					logger.warn("Job complete webhook dispatch failed", error);
-				});
-			}
+      if (updatedJob) {
+        void trackCanonicalActivationEvent(
+          "application_marked_applied",
+          {
+            source: "jobs_apply_route",
+            had_pdf: Boolean(updatedJob.pdfPath),
+            tracer_links_enabled: Boolean(updatedJob.tracerLinksEnabled),
+            sponsor_match_found:
+              typeof updatedJob.sponsorMatchScore === "number" &&
+              updatedJob.sponsorMatchScore >= 50,
+          },
+          {
+            occurredAt: appliedAtDate,
+            requestOrigin: resolveRequestOrigin(req),
+            urlPath: "/jobs",
+          },
+        );
+        notifyJobCompleteWebhook(updatedJob).catch((error) => {
+          logger.warn("Job complete webhook dispatch failed", error);
+        });
+      }
 
-			if (!updatedJob) {
-				return fail(res, notFound("Job not found"));
-			}
+      if (!updatedJob) {
+        return fail(res, notFound("Job not found"));
+      }
 
-			ok(res, await hydrateJobPdfFreshness(updatedJob));
-		} catch (error) {
-			fail(res, toJobsRouteError(error));
-		}
-	},
+      ok(res, await hydrateJobPdfFreshness(updatedJob));
+    } catch (error) {
+      fail(res, toJobsRouteError(error));
+    }
+  },
 );

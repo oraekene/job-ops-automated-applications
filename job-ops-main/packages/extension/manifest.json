@@ -1,33 +1,33 @@
 {
-	"manifest_version": 3,
-	"name": "JobOps Copilot",
-	"version": "0.1.0",
-	"description": "Auto-fill job applications with JobOps AI",
-	"permissions": ["tabs", "scripting", "storage", "activeTab"],
-	"host_permissions": [
-		"https://*.greenhouse.io/*",
-		"https://*.lever.co/*",
-		"http://localhost:3005/*"
-	],
-	"background": {
-		"service_worker": "background.js",
-		"type": "module"
-	},
-	"action": {
-		"default_popup": "popup.html",
-		"default_title": "JobOps Copilot"
-	},
-	"content_scripts": [
-		{
-			"matches": ["https://*.greenhouse.io/*", "https://*.lever.co/*"],
-			"js": ["content-script.js"],
-			"run_at": "document_end"
-		}
-	],
-	"web_accessible_resources": [
-		{
-			"resources": ["content-script.js"],
-			"matches": ["https://*.greenhouse.io/*", "https://*.lever.co/*"]
-		}
-	]
+  "manifest_version": 3,
+  "name": "JobOps Copilot",
+  "version": "0.1.0",
+  "description": "Auto-fill job applications with JobOps AI",
+  "permissions": ["tabs", "scripting", "storage", "activeTab"],
+  "host_permissions": [
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "http://localhost:3005/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JobOps Copilot"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.greenhouse.io/*", "https://*.lever.co/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content-script.js"],
+      "matches": ["https://*.greenhouse.io/*", "https://*.lever.co/*"]
+    }
+  ]
 }

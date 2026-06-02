@@ -4,37 +4,37 @@ import { checkForUpdate, parseVersion } from "../lib/version";
 declare const __APP_VERSION__: string;
 
 interface VersionState {
-	version: string;
-	updateAvailable: boolean;
-	latestVersion: string | null;
+  version: string;
+  updateAvailable: boolean;
+  latestVersion: string | null;
 }
 
 export function useVersionCheck(): VersionState {
-	const [state, setState] = useState<VersionState>(() => ({
-		version:
-			typeof __APP_VERSION__ !== "undefined"
-				? parseVersion(__APP_VERSION__ as string)
-				: "unknown",
-		updateAvailable: false,
-		latestVersion: null,
-	}));
+  const [state, setState] = useState<VersionState>(() => ({
+    version:
+      typeof __APP_VERSION__ !== "undefined"
+        ? parseVersion(__APP_VERSION__ as string)
+        : "unknown",
+    updateAvailable: false,
+    latestVersion: null,
+  }));
 
-	useEffect(() => {
-		let cancelled = false;
+  useEffect(() => {
+    let cancelled = false;
 
-		checkForUpdate().then((result) => {
-			if (cancelled) return;
-			setState({
-				version: result.currentVersion,
-				updateAvailable: result.updateAvailable,
-				latestVersion: result.latestVersion,
-			});
-		});
+    checkForUpdate().then((result) => {
+      if (cancelled) return;
+      setState({
+        version: result.currentVersion,
+        updateAvailable: result.updateAvailable,
+        latestVersion: result.latestVersion,
+      });
+    });
 
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-	return state;
+  return state;
 }

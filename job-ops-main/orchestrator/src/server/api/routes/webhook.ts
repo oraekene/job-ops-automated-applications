@@ -13,39 +13,39 @@ export const webhookRouter = Router();
  * POST /api/webhook/trigger - Webhook endpoint for n8n to trigger the pipeline
  */
 webhookRouter.post("/trigger", async (req: Request, res: Response) => {
-	const authHeader = req.headers.authorization;
-	const expectedToken = process.env.WEBHOOK_SECRET;
+  const authHeader = req.headers.authorization;
+  const expectedToken = process.env.WEBHOOK_SECRET;
 
-	if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
-		return fail(res, unauthorized());
-	}
+  if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
+    return fail(res, unauthorized());
+  }
 
-	try {
-		if (isDemoMode()) {
-			const simulated = await simulatePipelineRun();
-			return okWithMeta(
-				res,
-				{
-					message: "Pipeline trigger simulated in demo mode",
-					triggeredAt: new Date().toISOString(),
-					runId: simulated.runId,
-				},
-				{ simulated: true },
-			);
-		}
+  try {
+    if (isDemoMode()) {
+      const simulated = await simulatePipelineRun();
+      return okWithMeta(
+        res,
+        {
+          message: "Pipeline trigger simulated in demo mode",
+          triggeredAt: new Date().toISOString(),
+          runId: simulated.runId,
+        },
+        { simulated: true },
+      );
+    }
 
-		// Start pipeline in background
-		runWithRequestContext({}, () => {
-			runPipeline().catch((error) => {
-				logger.error("Webhook-triggered pipeline run failed", error);
-			});
-		});
+    // Start pipeline in background
+    runWithRequestContext({}, () => {
+      runPipeline().catch((error) => {
+        logger.error("Webhook-triggered pipeline run failed", error);
+      });
+    });
 
-		ok(res, {
-			message: "Pipeline triggered",
-			triggeredAt: new Date().toISOString(),
-		});
-	} catch (error) {
-		fail(res, toAppError(error));
-	}
+    ok(res, {
+      message: "Pipeline triggered",
+      triggeredAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    fail(res, toAppError(error));
+  }
 });

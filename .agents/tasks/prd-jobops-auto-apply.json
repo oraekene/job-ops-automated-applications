@@ -36,13 +36,41 @@
     "tenancy": "DEFAULT_TENANT_ID — single-tenant assumption for this round, multi-tenant scoping preserved in repository calls"
   },
   "routes": [
-    { "path": "GET /api/applications/prep", "name": "Application prep", "purpose": "Real implementation: looks up job by URL, returns profile + suitabilityScore + pdfFreshness" },
-    { "path": "POST /api/applications/payload", "name": "Application payload", "purpose": "Real implementation: Ghostwriter screening answers + tailored PDF + filled fields" },
-    { "path": "POST /api/applications/confirm", "name": "Application confirm", "purpose": "Unchanged — record successful submission" },
-    { "path": "GET /api/applications/pending", "name": "Pending applications", "purpose": "Unchanged — used by orchestrator UI" },
-    { "path": "GET /api/applications/queue", "name": "Auto-apply queue (NEW)", "purpose": "Returns next N auto-applicable jobs for the extension to process" },
-    { "path": "POST /api/applications/queue-result", "name": "Auto-apply queue result (NEW)", "purpose": "Extension reports submitted | skipped + reason for a given job" },
-    { "path": "GET /api/applications/queue/status", "name": "Queue status (NEW)", "purpose": "Returns counts (pending, submitted today, skipped today) for the extension popup" }
+    {
+      "path": "GET /api/applications/prep",
+      "name": "Application prep",
+      "purpose": "Real implementation: looks up job by URL, returns profile + suitabilityScore + pdfFreshness"
+    },
+    {
+      "path": "POST /api/applications/payload",
+      "name": "Application payload",
+      "purpose": "Real implementation: Ghostwriter screening answers + tailored PDF + filled fields"
+    },
+    {
+      "path": "POST /api/applications/confirm",
+      "name": "Application confirm",
+      "purpose": "Unchanged — record successful submission"
+    },
+    {
+      "path": "GET /api/applications/pending",
+      "name": "Pending applications",
+      "purpose": "Unchanged — used by orchestrator UI"
+    },
+    {
+      "path": "GET /api/applications/queue",
+      "name": "Auto-apply queue (NEW)",
+      "purpose": "Returns next N auto-applicable jobs for the extension to process"
+    },
+    {
+      "path": "POST /api/applications/queue-result",
+      "name": "Auto-apply queue result (NEW)",
+      "purpose": "Extension reports submitted | skipped + reason for a given job"
+    },
+    {
+      "path": "GET /api/applications/queue/status",
+      "name": "Queue status (NEW)",
+      "purpose": "Returns counts (pending, submitted today, skipped today) for the extension popup"
+    }
   ],
   "uiNotes": [
     "Extension popup: add a single 'Auto-apply' toggle, a 'Queue: N pending' indicator, and a 'Last run' timestamp. Reuse the existing popup layout and the `chrome.storage.sync` settings pattern.",
@@ -50,8 +78,34 @@
     "Orchestrator UI: no new page required. The existing applications tracking view (or pending list) should be the place to see queue progress; this is wired via the new /queue/status endpoint and a thin new component on the existing page."
   ],
   "dataModel": [
-    { "entity": "applications", "fields": ["id", "tenantId", "jobId", "atsType", "status", "fieldPayload", "screeningAnswers", "customQuestions", "confirmationId", "submittedAt", "screenshotPath", "errorMessage", "createdAt", "updatedAt"], "notes": "Existing table — no schema changes in this PRD. errorMessage is repurposed to record skip reasons." },
-    { "entity": "jobs", "fields": ["auto_applicable", "last_application_id"], "notes": "Existing columns from the design spec — verify they exist in schema; if missing, US-009 adds them." }
+    {
+      "entity": "applications",
+      "fields": [
+        "id",
+        "tenantId",
+        "jobId",
+        "atsType",
+        "status",
+        "fieldPayload",
+        "screeningAnswers",
+        "customQuestions",
+        "confirmationId",
+        "submittedAt",
+        "screenshotPath",
+        "errorMessage",
+        "createdAt",
+        "updatedAt"
+      ],
+      "notes": "Existing table — no schema changes in this PRD. errorMessage is repurposed to record skip reasons."
+    },
+    {
+      "entity": "jobs",
+      "fields": [
+        "auto_applicable",
+        "last_application_id"
+      ],
+      "notes": "Existing columns from the design spec — verify they exist in schema; if missing, US-009 adds them."
+    }
   ],
   "importFormat": {
     "description": "Not applicable — extension reads from the orchestrator via the new queue endpoint. Existing onboarding imports the resume via rxresume or a manual upload step.",
@@ -120,7 +174,7 @@
     {
       "id": "US-026",
       "title": "Apply biome format --write to fix auto-fixable line-ending and format errors",
-      "status": "open",
+      "status": "done",
       "dependsOn": [],
       "description": "The baseline biome ci run reported 871 errors, the vast majority being CRLF↔LF line-ending mismatches and import-sort issues. Run `biome format . --write` and `biome check --write` to auto-fix the safe ones.",
       "acceptanceCriteria": [
@@ -134,8 +188,10 @@
     {
       "id": "US-027",
       "title": "Fix remaining biome a11y and import-sort errors manually",
-      "status": "open",
-      "dependsOn": ["US-026"],
+      "status": "done",
+      "dependsOn": [
+        "US-026"
+      ],
       "description": "After US-026 runs biome's auto-fix, a small number of errors remain that require manual code changes: `lint/a11y/noLabelWithoutControl` in `packages/extension/src/popup/index.tsx:20` (label missing `htmlFor` or input not nested) and `assist/source/organizeImports` in `packages/extension/vite.config.ts:1`. Fix them by hand.",
       "acceptanceCriteria": [
         "`packages/extension/src/popup/index.tsx:20` is fixed: the `<label>` either has an `htmlFor` matching the related input's `id`, or the input is moved inside the label",
@@ -149,7 +205,13 @@
       "id": "US-001",
       "title": "Verify baseline is green after fixes",
       "status": "open",
-      "dependsOn": ["US-023", "US-024", "US-025", "US-026", "US-027"],
+      "dependsOn": [
+        "US-023",
+        "US-024",
+        "US-025",
+        "US-026",
+        "US-027"
+      ],
       "description": "As a developer, I want to confirm the repo is in a known-good state before I start changing code, so that any failures in later stories are attributable to the new code and not the baseline. This story runs after the 5 baseline-fix stories above.",
       "acceptanceCriteria": [
         "All 9 quality gates pass on the current `main` branch with no code changes (other than the baseline fixes from US-023..US-027)",
@@ -161,7 +223,9 @@
       "id": "US-002",
       "title": "prepJob: look up job by URL",
       "status": "open",
-      "dependsOn": ["US-001"],
+      "dependsOn": [
+        "US-001"
+      ],
       "description": "As the extension, when I call `GET /api/applications/prep?url=...&ats=...` I want the orchestrator to find the job in the `jobs` table by its URL, so the panel can show real job data instead of an empty result.",
       "acceptanceCriteria": [
         "`applicationService.prepJob` queries the `jobs` table for a row whose `url` (or, for greenhouse/lever, a deterministic URL pattern derived from the canonical job id) matches the query parameter",
@@ -175,7 +239,9 @@
       "id": "US-003",
       "title": "prepJob: include user profile",
       "status": "open",
-      "dependsOn": ["US-002"],
+      "dependsOn": [
+        "US-002"
+      ],
       "description": "As the extension, I want prepJob to return the user's profile fields the form filler needs, so I can show them in the panel and pass them into doFill.",
       "acceptanceCriteria": [
         "`result.profile` contains `{ first_name, last_name, email, phone, linkedin_url, current_company }` read from the existing profile service (`getProfile` from `@server/services/profile`)",
@@ -188,7 +254,9 @@
       "id": "US-004",
       "title": "prepJob: include suitabilityScore",
       "status": "open",
-      "dependsOn": ["US-002"],
+      "dependsOn": [
+        "US-002"
+      ],
       "description": "As the extension, I want to show a fit score in the action panel, so the user can see which jobs are worth applying to.",
       "acceptanceCriteria": [
         "prepJob calls the existing suitability scoring function (to be discovered — likely in `@server/services/suitability` or similar) with the job and the active profile, and assigns the integer result to `result.job.suitabilityScore`",
@@ -201,7 +269,9 @@
       "id": "US-005",
       "title": "prepJob: include pdfFreshness",
       "status": "open",
-      "dependsOn": ["US-002"],
+      "dependsOn": [
+        "US-002"
+      ],
       "description": "As the extension, I want to know whether a tailored PDF already exists for this job and when it was last generated, so I can warn the user if it's stale.",
       "acceptanceCriteria": [
         "`result.hasTailoredPdf` is `true` if a tailored PDF exists for the jobId in the existing PDF service / storage; `result.pdfFreshness` is the ISO timestamp of when it was last generated",
@@ -214,7 +284,9 @@
       "id": "US-006",
       "title": "buildPayload: fetch profile and call Ghostwriter for screening answers",
       "status": "open",
-      "dependsOn": ["US-003"],
+      "dependsOn": [
+        "US-003"
+      ],
       "description": "As the extension, when I call `POST /api/applications/payload` I want screening answers generated by the existing Ghostwriter service, so the form filler has real answers for custom questions.",
       "acceptanceCriteria": [
         "`buildPayload` resolves the profile via `getProfile` and the job via the repository, then calls the existing Ghostwriter service to generate a `{ question: string, answer: string }` map for the supplied `customQuestions` array",
@@ -228,7 +300,9 @@
       "id": "US-007",
       "title": "buildPayload: generate tailored PDF and return base64",
       "status": "open",
-      "dependsOn": ["US-006"],
+      "dependsOn": [
+        "US-006"
+      ],
       "description": "As the extension, I want the orchestrator to return a base64-encoded tailored PDF in the payload, so the extension can upload it to the ATS via a DataTransfer without needing direct filesystem access.",
       "acceptanceCriteria": [
         "buildPayload uses the existing PDF service (rxresume or typst pipeline — discover and document which) to produce a tailored PDF for the job and profile",
@@ -242,7 +316,9 @@
       "id": "US-008",
       "title": "buildPayload: assemble fields and persist application row",
       "status": "open",
-      "dependsOn": ["US-007"],
+      "dependsOn": [
+        "US-007"
+      ],
       "description": "As the extension, I want the payload to include every field the ATS drivers expect, so the form filler can call a single endpoint and get everything back.",
       "acceptanceCriteria": [
         "`result.fields` is populated from the profile (first_name, last_name, email, phone, linkedin_url, current_company) plus the settings-registry values for `autoApplicationSalaryRequirement`",
@@ -256,7 +332,9 @@
       "id": "US-009",
       "title": "Add `auto_applicable` and `last_application_id` to jobs table if missing",
       "status": "open",
-      "dependsOn": ["US-001"],
+      "dependsOn": [
+        "US-001"
+      ],
       "description": "As the orchestrator, I want a per-job flag for 'this job is in the auto-apply pool' and a pointer to the most recent application, so the queue endpoint can return the right jobs and the UI can show history.",
       "acceptanceCriteria": [
         "Verify both columns exist in `orchestrator/src/server/db/schema.ts` on the `jobs` table. If they don't, add them with appropriate Drizzle types and create a migration",
@@ -269,7 +347,9 @@
       "id": "US-010",
       "title": "Add GET /api/applications/queue endpoint",
       "status": "open",
-      "dependsOn": ["US-009"],
+      "dependsOn": [
+        "US-009"
+      ],
       "description": "As the extension's background service worker, I want an endpoint that returns the next N auto-applicable jobs, so I have a list to process without needing to query the full jobs table.",
       "acceptanceCriteria": [
         "Mount `GET /api/applications/queue?limit=N` on the existing `applicationRouter`",
@@ -284,7 +364,9 @@
       "id": "US-011",
       "title": "Add POST /api/applications/queue-result endpoint",
       "status": "open",
-      "dependsOn": ["US-010"],
+      "dependsOn": [
+        "US-010"
+      ],
       "description": "As the extension, I want an endpoint to report the result of a queue item, so the orchestrator can record success or skip + reason and the UI can show progress.",
       "acceptanceCriteria": [
         "Mount `POST /api/applications/queue-result` accepting `{ jobId, atsType, outcome: 'submitted' | 'skipped' | 'failed', reason?: string, confirmationId?: string, submittedAt?: string, fieldSnapshot?: object, answersSnapshot?: object, screenshotBase64?: string }`",
@@ -299,7 +381,9 @@
       "id": "US-012",
       "title": "Add GET /api/applications/queue/status endpoint",
       "status": "open",
-      "dependsOn": ["US-010"],
+      "dependsOn": [
+        "US-010"
+      ],
       "description": "As the extension popup, I want a quick status endpoint so I can show 'Queue: N pending, M applied today' without re-querying the full jobs table.",
       "acceptanceCriteria": [
         "Returns `{ counts: { pending: number, submittedToday: number, skippedToday: number, failedToday: number }, lastRunAt: string | null }`",
@@ -314,7 +398,9 @@
       "id": "US-013",
       "title": "Extension doFill: call buildPayload instead of hardcoded data",
       "status": "open",
-      "dependsOn": ["US-008"],
+      "dependsOn": [
+        "US-008"
+      ],
       "description": "As the extension, I want doFill to call the real buildPayload endpoint and use the returned fields, cover letter, screening answers, and PDF, so the form is filled with the user's real data.",
       "acceptanceCriteria": [
         "Replace the hardcoded `profile` object in `packages/extension/src/content-script.ts` with a call to `api.buildPayload(jobId, atsType, customQuestions)`",
@@ -328,7 +414,9 @@
       "id": "US-014",
       "title": "Extension doFill: upload the tailored PDF via DataTransfer",
       "status": "open",
-      "dependsOn": ["US-013"],
+      "dependsOn": [
+        "US-013"
+      ],
       "description": "As the extension, I want to upload the base64 PDF from buildPayload as a real file in the ATS's resume upload input, so the user's actual tailored resume is attached.",
       "acceptanceCriteria": [
         "Add a helper `uploadResume(input: HTMLInputElement, base64: string, filename: string): boolean` in `packages/extension/src/drivers/shared/file-injector.ts` that decodes base64 to bytes, builds a `File` with the right MIME, attaches it via `DataTransfer`, and dispatches `change`",
@@ -342,7 +430,9 @@
       "id": "US-015",
       "title": "Extension background service worker: poll /queue",
       "status": "open",
-      "dependsOn": ["US-010"],
+      "dependsOn": [
+        "US-010"
+      ],
       "description": "As the extension, I want a background service worker that polls the queue endpoint and dispatches each job, so the user can enable auto-apply once and walk away.",
       "acceptanceCriteria": [
         "Add a `background.ts` poll loop that calls `api.getQueue(10)` every 30 seconds while `autoApply.enabled` is true in `chrome.storage.sync`",
@@ -356,7 +446,10 @@
       "id": "US-016",
       "title": "Extension background: report results and close tabs",
       "status": "open",
-      "dependsOn": ["US-014", "US-015"],
+      "dependsOn": [
+        "US-014",
+        "US-015"
+      ],
       "description": "As the extension, I want each completed job to report its result to the orchestrator and the tab to close, so the queue moves forward without human intervention.",
       "acceptanceCriteria": [
         "The content script posts a `{ kind: 'jobops:result', jobId, outcome, reason?, confirmationId?, fieldSnapshot?, answersSnapshot? }` message to the background when the application submits, is skipped, or fails",
@@ -370,7 +463,9 @@
       "id": "US-017",
       "title": "Extension: detect CAPTCHAs, MFA, and unknown ATS as skipped",
       "status": "open",
-      "dependsOn": ["US-016"],
+      "dependsOn": [
+        "US-016"
+      ],
       "description": "As the extension, I want to detect common blockers and skip the job instead of looping or breaking the queue, so a single bad job doesn't stop auto-apply.",
       "acceptanceCriteria": [
         "Add a `detectBlocker(): { blocked: boolean, reason?: string }` helper that looks for: reCAPTCHA iframes (`iframe[src*='recaptcha']`), hCaptcha iframes, Greenhouse 'Sign in to apply' modal, Lever 'Sign in' modal, and any visible MFA prompt (`text*: 'verify your identity'`)",
@@ -384,7 +479,9 @@
       "id": "US-018",
       "title": "Extension popup: add Auto-apply toggle and queue status",
       "status": "open",
-      "dependsOn": ["US-012"],
+      "dependsOn": [
+        "US-012"
+      ],
       "description": "As the user, I want a single toggle in the extension popup to enable auto-apply, plus a small live status indicator, so I know what the extension is doing.",
       "acceptanceCriteria": [
         "Add an 'Auto-apply' checkbox to the existing popup in `packages/extension/src/popup/index.tsx` that stores `autoApply.enabled` in `chrome.storage.sync`",
@@ -398,7 +495,9 @@
       "id": "US-019",
       "title": "Orchestrator unit tests for prepJob",
       "status": "open",
-      "dependsOn": ["US-005"],
+      "dependsOn": [
+        "US-005"
+      ],
       "description": "As a developer, I want unit tests covering prepJob's contract so future refactors don't silently break the extension.",
       "acceptanceCriteria": [
         "Add `orchestrator/src/server/services/applications.test.ts` (or extend the existing test file if one is present) with cases for: job found + profile present, job found + no profile, job not found, no profile in DB, PDF present + freshness, PDF absent",
@@ -411,7 +510,9 @@
       "id": "US-020",
       "title": "Orchestrator unit tests for buildPayload",
       "status": "open",
-      "dependsOn": ["US-008"],
+      "dependsOn": [
+        "US-008"
+      ],
       "description": "As a developer, I want unit tests covering buildPayload's contract and failure paths so the extension's error handling can rely on the documented shapes.",
       "acceptanceCriteria": [
         "Add tests for: full success (profile, screening answers, PDF all present), no profile → 404, PDF generation failure → 422, empty `customQuestions` returns empty `screening_answers`",
@@ -424,7 +525,11 @@
       "id": "US-021",
       "title": "Extension vitest for queue runner and blocker detection",
       "status": "open",
-      "dependsOn": ["US-015", "US-016", "US-017"],
+      "dependsOn": [
+        "US-015",
+        "US-016",
+        "US-017"
+      ],
       "description": "As a developer, I want vitest coverage for the new background logic and the blocker detector, so the autonomous loop doesn't regress silently.",
       "acceptanceCriteria": [
         "Add `packages/extension/src/background.test.ts` with cases for: polling starts on toggle on, polling stops on toggle off, queue result is forwarded to api.reportQueueResult, tab is closed after result, 120s timeout reports 'failed'",
@@ -438,7 +543,10 @@
       "id": "US-022",
       "title": "End-to-end smoke: docs + README updates for the autonomous flow",
       "status": "open",
-      "dependsOn": ["US-013", "US-018"],
+      "dependsOn": [
+        "US-013",
+        "US-018"
+      ],
       "description": "As a new user, I want a short doc and an updated extension README that describe the autonomous flow, how to enable it, and the queue semantics, so I don't have to read the source to use the feature.",
       "acceptanceCriteria": [
         "Add a new doc page under `job-ops-main/docs-site/docs/features/auto-application.md` (or update the existing one if it's already there) covering: prerequisites (onboarding complete), how to enable auto-apply, what the queue does, how to read the status, what gets skipped and why, and how to disable",

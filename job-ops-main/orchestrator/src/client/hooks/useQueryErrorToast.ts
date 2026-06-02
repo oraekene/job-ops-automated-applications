@@ -11,16 +11,16 @@ import { formatUserFacingError } from "@/client/lib/error-format";
  * @param fallback  Fallback message used when the error is not an Error instance.
  */
 export function useQueryErrorToast(error: unknown, fallback: string): void {
-	const lastKeyRef = useRef<string | null>(null);
+  const lastKeyRef = useRef<string | null>(null);
 
-	useEffect(() => {
-		if (!error) {
-			lastKeyRef.current = null;
-			return;
-		}
-		const message = formatUserFacingError(error, fallback);
-		if (lastKeyRef.current === message) return;
-		lastKeyRef.current = message;
-		toast.error(message);
-	}, [error, fallback]);
+  useEffect(() => {
+    if (!error) {
+      lastKeyRef.current = null;
+      return;
+    }
+    const message = formatUserFacingError(error, fallback);
+    if (lastKeyRef.current === message) return;
+    lastKeyRef.current = message;
+    toast.error(message);
+  }, [error, fallback]);
 }

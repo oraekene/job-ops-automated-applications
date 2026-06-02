@@ -1,16 +1,16 @@
 export const PROMPT_TEMPLATE_DEFINITIONS = {
-	ghostwriterSystemPromptTemplate: {
-		label: "Ghostwriter system prompt",
-		description:
-			"Controls Ghostwriter's base behavior before job context and profile context are attached.",
-		placeholders: [
-			"outputLanguage",
-			"tone",
-			"formality",
-			"constraintsSentence",
-			"avoidTermsSentence",
-		] as const,
-		defaultTemplate: `
+  ghostwriterSystemPromptTemplate: {
+    label: "Ghostwriter system prompt",
+    description:
+      "Controls Ghostwriter's base behavior before job context and profile context are attached.",
+    placeholders: [
+      "outputLanguage",
+      "tone",
+      "formality",
+      "constraintsSentence",
+      "avoidTermsSentence",
+    ] as const,
+    defaultTemplate: `
 You are Ghostwriter, a job-application writing assistant for a single job.
 Use only the provided job and profile context unless the user gives extra details.
 Do not claim actions were executed. You are read-only and advisory.
@@ -24,23 +24,23 @@ Writing style formality: {{formality}}.
 {{constraintsSentence}}
 {{avoidTermsSentence}}
 `.trim(),
-	},
-	tailoringPromptTemplate: {
-		label: "Resume tailoring prompt",
-		description:
-			"Controls how summary, headline, and skills are generated for a job-specific resume.",
-		placeholders: [
-			"jobDescription",
-			"profileJson",
-			"outputLanguage",
-			"tone",
-			"formality",
-			"summaryMaxWordsLine",
-			"maxKeywordsPerSkillLine",
-			"constraintsBullet",
-			"avoidTermsBullet",
-		] as const,
-		defaultTemplate: `
+  },
+  tailoringPromptTemplate: {
+    label: "Resume tailoring prompt",
+    description:
+      "Controls how summary, headline, and skills are generated for a job-specific resume.",
+    placeholders: [
+      "jobDescription",
+      "profileJson",
+      "outputLanguage",
+      "tone",
+      "formality",
+      "summaryMaxWordsLine",
+      "maxKeywordsPerSkillLine",
+      "constraintsBullet",
+      "avoidTermsBullet",
+    ] as const,
+    defaultTemplate: `
 You are an expert resume writer tailoring a profile for a specific job application.
 You must return a JSON object with three fields: "headline", "summary", and "skills".
 
@@ -89,23 +89,23 @@ OUTPUT FORMAT (JSON):
   "skills": [ ... ]
 }
 `.trim(),
-	},
-	scoringPromptTemplate: {
-		label: "Job scoring prompt",
-		description:
-			"Controls how suitability scoring evaluates the candidate profile against a job listing.",
-		placeholders: [
-			"profileJson",
-			"jobTitle",
-			"employer",
-			"location",
-			"salary",
-			"degreeRequired",
-			"disciplines",
-			"jobDescription",
-			"scoringInstructionsText",
-		] as const,
-		defaultTemplate: `
+  },
+  scoringPromptTemplate: {
+    label: "Job scoring prompt",
+    description:
+      "Controls how suitability scoring evaluates the candidate profile against a job listing.",
+    placeholders: [
+      "profileJson",
+      "jobTitle",
+      "employer",
+      "location",
+      "salary",
+      "degreeRequired",
+      "disciplines",
+      "jobDescription",
+      "scoringInstructionsText",
+    ] as const,
+    defaultTemplate: `
 You are evaluating a job listing for a candidate. Score how suitable this job is for the candidate on a scale of 0-100.
 
 SCORING CRITERIA:
@@ -140,26 +140,26 @@ REQUIRED FORMAT (exactly this structure):
 EXAMPLE VALID RESPONSE:
 {"score": 75, "reason": "Strong skills match with React and TypeScript requirements, but position requires 3+ years experience."}
 `.trim(),
-	},
+  },
 } as const;
 
 export type PromptTemplateSettingKey = keyof typeof PROMPT_TEMPLATE_DEFINITIONS;
 
 export type PromptTemplateDefinition =
-	(typeof PROMPT_TEMPLATE_DEFINITIONS)[PromptTemplateSettingKey];
+  (typeof PROMPT_TEMPLATE_DEFINITIONS)[PromptTemplateSettingKey];
 
 export const PROMPT_TEMPLATE_SETTING_KEYS = Object.keys(
-	PROMPT_TEMPLATE_DEFINITIONS,
+  PROMPT_TEMPLATE_DEFINITIONS,
 ) as PromptTemplateSettingKey[];
 
 export function getPromptTemplateDefinition(
-	key: PromptTemplateSettingKey,
+  key: PromptTemplateSettingKey,
 ): PromptTemplateDefinition {
-	return PROMPT_TEMPLATE_DEFINITIONS[key];
+  return PROMPT_TEMPLATE_DEFINITIONS[key];
 }
 
 export function getDefaultPromptTemplate(
-	key: PromptTemplateSettingKey,
+  key: PromptTemplateSettingKey,
 ): string {
-	return PROMPT_TEMPLATE_DEFINITIONS[key].defaultTemplate;
+  return PROMPT_TEMPLATE_DEFINITIONS[key].defaultTemplate;
 }

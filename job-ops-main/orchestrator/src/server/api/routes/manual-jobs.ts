@@ -1,9 +1,9 @@
 import {
-	AppError,
-	badRequest,
-	notFound,
-	requestTimeout,
-	toAppError,
+  AppError,
+  badRequest,
+  notFound,
+  requestTimeout,
+  toAppError,
 } from "@infra/errors";
 import { fail, ok } from "@infra/http";
 import { logger } from "@infra/logger";
@@ -20,332 +20,332 @@ import { z } from "zod";
 export const manualJobsRouter = Router();
 
 const manualJobFetchSchema = z.object({
-	url: z.string().trim().url().max(2000),
+  url: z.string().trim().url().max(2000),
 });
 
 const manualJobInferenceSchema = z.object({
-	jobDescription: z.string().trim().min(1).max(60000),
+  jobDescription: z.string().trim().min(1).max(60000),
 });
 
 const manualJobImportSchema = z.object({
-	job: z.object({
-		title: z.string().trim().min(1).max(500),
-		employer: z.string().trim().min(1).max(500),
-		jobUrl: z.string().trim().url().max(2000),
-		applicationLink: z.string().trim().url().max(2000).optional(),
-		location: z.string().trim().max(200).optional(),
-		salary: z.string().trim().max(200).optional(),
-		deadline: z.string().trim().max(100).optional(),
-		jobDescription: z.string().trim().min(1).max(40000),
-		jobType: z.string().trim().max(200).optional(),
-		jobLevel: z.string().trim().max(200).optional(),
-		jobFunction: z.string().trim().max(200).optional(),
-		disciplines: z.string().trim().max(200).optional(),
-		degreeRequired: z.string().trim().max(200).optional(),
-		starting: z.string().trim().max(200).optional(),
-	}),
+  job: z.object({
+    title: z.string().trim().min(1).max(500),
+    employer: z.string().trim().min(1).max(500),
+    jobUrl: z.string().trim().url().max(2000),
+    applicationLink: z.string().trim().url().max(2000).optional(),
+    location: z.string().trim().max(200).optional(),
+    salary: z.string().trim().max(200).optional(),
+    deadline: z.string().trim().max(100).optional(),
+    jobDescription: z.string().trim().min(1).max(40000),
+    jobType: z.string().trim().max(200).optional(),
+    jobLevel: z.string().trim().max(200).optional(),
+    jobFunction: z.string().trim().max(200).optional(),
+    disciplines: z.string().trim().max(200).optional(),
+    degreeRequired: z.string().trim().max(200).optional(),
+    starting: z.string().trim().max(200).optional(),
+  }),
 });
 
 const cleanOptional = (value?: string | null) => {
-	if (!value) return undefined;
-	const trimmed = value.trim();
-	return trimmed.length > 0 ? trimmed : undefined;
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 };
 
 const BLOCKED_AUTOFETCH_HOSTS: Array<{
-	label: string;
-	match: (hostname: string) => boolean;
+  label: string;
+  match: (hostname: string) => boolean;
 }> = [
-	{
-		label: "LinkedIn",
-		match: (hostname) =>
-			hostname === "linkedin.com" || hostname.endsWith(".linkedin.com"),
-	},
-	{
-		label: "Indeed",
-		match: (hostname) =>
-			hostname === "indeed.com" || hostname.includes("indeed."),
-	},
+  {
+    label: "LinkedIn",
+    match: (hostname) =>
+      hostname === "linkedin.com" || hostname.endsWith(".linkedin.com"),
+  },
+  {
+    label: "Indeed",
+    match: (hostname) =>
+      hostname === "indeed.com" || hostname.includes("indeed."),
+  },
 ];
 
 function getHostname(value: string): string | null {
-	try {
-		return new URL(value).hostname.toLowerCase();
-	} catch {
-		return null;
-	}
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 function getBlockedAutofetchLabel(url: string): string | null {
-	const hostname = getHostname(url);
-	if (!hostname) return null;
-	const blocked = BLOCKED_AUTOFETCH_HOSTS.find((entry) =>
-		entry.match(hostname),
-	);
-	return blocked?.label ?? null;
+  const hostname = getHostname(url);
+  if (!hostname) return null;
+  const blocked = BLOCKED_AUTOFETCH_HOSTS.find((entry) =>
+    entry.match(hostname),
+  );
+  return blocked?.label ?? null;
 }
 
 function buildFetchFailureMessage(status: number): string {
-	if (status === 401 || status === 403 || status === 429) {
-		return "This site blocks automated fetch requests. Paste the job description manually.";
-	}
-	if (status === 404) {
-		return "We couldn't find that page. Check the URL or paste the job description manually.";
-	}
-	return "Couldn't fetch this URL automatically. Paste the job description manually.";
+  if (status === 401 || status === 403 || status === 429) {
+    return "This site blocks automated fetch requests. Paste the job description manually.";
+  }
+  if (status === 404) {
+    return "We couldn't find that page. Check the URL or paste the job description manually.";
+  }
+  return "Couldn't fetch this URL automatically. Paste the job description manually.";
 }
 
 /**
  * POST /api/manual-jobs/fetch - Fetch and extract job content from a URL
  */
 manualJobsRouter.post("/fetch", async (req: Request, res: Response) => {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), 15000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-	try {
-		const input = manualJobFetchSchema.parse(req.body ?? {});
-		const blockedLabel = getBlockedAutofetchLabel(input.url);
-		if (blockedLabel) {
-			return fail(
-				res,
-				new AppError({
-					status: 422,
-					code: "UNPROCESSABLE_ENTITY",
-					message: `Auto-fetch is not supported for ${blockedLabel} links. Paste the job description manually.`,
-				}),
-			);
-		}
+  try {
+    const input = manualJobFetchSchema.parse(req.body ?? {});
+    const blockedLabel = getBlockedAutofetchLabel(input.url);
+    if (blockedLabel) {
+      return fail(
+        res,
+        new AppError({
+          status: 422,
+          code: "UNPROCESSABLE_ENTITY",
+          message: `Auto-fetch is not supported for ${blockedLabel} links. Paste the job description manually.`,
+        }),
+      );
+    }
 
-		const response = await fetch(input.url, {
-			signal: controller.signal,
-			headers: {
-				"User-Agent":
-					"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-				Accept:
-					"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-			},
-		});
+    const response = await fetch(input.url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
 
-		if (!response.ok) {
-			return fail(
-				res,
-				new AppError({
-					status: 502,
-					code: "UPSTREAM_ERROR",
-					message: buildFetchFailureMessage(response.status),
-					details: { upstreamStatus: response.status },
-				}),
-			);
-		}
+    if (!response.ok) {
+      return fail(
+        res,
+        new AppError({
+          status: 502,
+          code: "UPSTREAM_ERROR",
+          message: buildFetchFailureMessage(response.status),
+          details: { upstreamStatus: response.status },
+        }),
+      );
+    }
 
-		const html = await response.text();
-		const dom = new JSDOM(html);
-		const document = dom.window.document;
+    const html = await response.text();
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
 
-		// Extract page title (often contains job title)
-		const pageTitle =
-			document.querySelector("title")?.textContent?.trim() || "";
+    // Extract page title (often contains job title)
+    const pageTitle =
+      document.querySelector("title")?.textContent?.trim() || "";
 
-		// Extract meta description
-		const metaDescription =
-			document
-				.querySelector('meta[name="description"]')
-				?.getAttribute("content")
-				?.trim() || "";
+    // Extract meta description
+    const metaDescription =
+      document
+        .querySelector('meta[name="description"]')
+        ?.getAttribute("content")
+        ?.trim() || "";
 
-		// Extract Open Graph data
-		const ogTitle =
-			document
-				.querySelector('meta[property="og:title"]')
-				?.getAttribute("content")
-				?.trim() || "";
-		const ogDescription =
-			document
-				.querySelector('meta[property="og:description"]')
-				?.getAttribute("content")
-				?.trim() || "";
-		const ogSiteName =
-			document
-				.querySelector('meta[property="og:site-name"]')
-				?.getAttribute("content")
-				?.trim() || "";
+    // Extract Open Graph data
+    const ogTitle =
+      document
+        .querySelector('meta[property="og:title"]')
+        ?.getAttribute("content")
+        ?.trim() || "";
+    const ogDescription =
+      document
+        .querySelector('meta[property="og:description"]')
+        ?.getAttribute("content")
+        ?.trim() || "";
+    const ogSiteName =
+      document
+        .querySelector('meta[property="og:site-name"]')
+        ?.getAttribute("content")
+        ?.trim() || "";
 
-		// Remove non-content elements
-		const elementsToRemove = document.querySelectorAll(
-			"script, style, nav, header, footer, aside, iframe, noscript, " +
-				'[role="navigation"], [role="banner"], [role="contentinfo"], ' +
-				".nav, .navbar, .header, .footer, .sidebar, .menu, .cookie, .popup, .modal, .ad, .advertisement",
-		);
-		elementsToRemove.forEach((el) => {
-			el.remove();
-		});
+    // Remove non-content elements
+    const elementsToRemove = document.querySelectorAll(
+      "script, style, nav, header, footer, aside, iframe, noscript, " +
+        '[role="navigation"], [role="banner"], [role="contentinfo"], ' +
+        ".nav, .navbar, .header, .footer, .sidebar, .menu, .cookie, .popup, .modal, .ad, .advertisement",
+    );
+    elementsToRemove.forEach((el) => {
+      el.remove();
+    });
 
-		// Try to find the main job content area
-		const mainContent =
-			document.querySelector(
-				'main, [role="main"], article, ' +
-					".job-description, .job-details, .job-content, .vacancy-description, " +
-					"#job-description, #job-details, #job-content, " +
-					'[class*="job-desc"], [class*="jobDesc"], [class*="vacancy"], [class*="posting"]',
-			) || document.body;
+    // Try to find the main job content area
+    const mainContent =
+      document.querySelector(
+        'main, [role="main"], article, ' +
+          ".job-description, .job-details, .job-content, .vacancy-description, " +
+          "#job-description, #job-details, #job-content, " +
+          '[class*="job-desc"], [class*="jobDesc"], [class*="vacancy"], [class*="posting"]',
+      ) || document.body;
 
-		// Get text content
-		let textContent = mainContent?.textContent || "";
+    // Get text content
+    let textContent = mainContent?.textContent || "";
 
-		// Clean up whitespace
-		textContent = textContent
-			.replace(/[\t ]+/g, " ")
-			.replace(/\n\s*\n/g, "\n\n")
-			.replace(/\n{3,}/g, "\n\n")
-			.trim();
+    // Clean up whitespace
+    textContent = textContent
+      .replace(/[\t ]+/g, " ")
+      .replace(/\n\s*\n/g, "\n\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
 
-		// Build enriched content with extracted metadata
-		let enrichedContent = "";
-		if (pageTitle) enrichedContent += `Page Title: ${pageTitle}\n`;
-		if (ogTitle && ogTitle !== pageTitle)
-			enrichedContent += `Job Title: ${ogTitle}\n`;
-		if (ogSiteName) enrichedContent += `Company/Site: ${ogSiteName}\n`;
-		if (ogDescription) enrichedContent += `Summary: ${ogDescription}\n`;
-		if (metaDescription && metaDescription !== ogDescription)
-			enrichedContent += `Description: ${metaDescription}\n`;
-		if (enrichedContent) enrichedContent += "\n---\n\n";
-		enrichedContent += textContent;
+    // Build enriched content with extracted metadata
+    let enrichedContent = "";
+    if (pageTitle) enrichedContent += `Page Title: ${pageTitle}\n`;
+    if (ogTitle && ogTitle !== pageTitle)
+      enrichedContent += `Job Title: ${ogTitle}\n`;
+    if (ogSiteName) enrichedContent += `Company/Site: ${ogSiteName}\n`;
+    if (ogDescription) enrichedContent += `Summary: ${ogDescription}\n`;
+    if (metaDescription && metaDescription !== ogDescription)
+      enrichedContent += `Description: ${metaDescription}\n`;
+    if (enrichedContent) enrichedContent += "\n---\n\n";
+    enrichedContent += textContent;
 
-		// Limit to reasonable size
-		if (enrichedContent.length > 50000) {
-			enrichedContent = enrichedContent.substring(0, 50000);
-		}
+    // Limit to reasonable size
+    if (enrichedContent.length > 50000) {
+      enrichedContent = enrichedContent.substring(0, 50000);
+    }
 
-		ok(res, {
-			content: enrichedContent,
-			url: input.url,
-		});
-	} catch (error) {
-		if (error instanceof z.ZodError) {
-			return fail(res, badRequest(error.message, error.flatten()));
-		}
-		if (error instanceof Error && error.name === "AbortError") {
-			return fail(res, requestTimeout());
-		}
-		fail(res, toAppError(error));
-	} finally {
-		clearTimeout(timeout);
-	}
+    ok(res, {
+      content: enrichedContent,
+      url: input.url,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(res, badRequest(error.message, error.flatten()));
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      return fail(res, requestTimeout());
+    }
+    fail(res, toAppError(error));
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 /**
  * POST /api/manual-jobs/infer - Infer job details from a pasted description
  */
 manualJobsRouter.post("/infer", async (req: Request, res: Response) => {
-	try {
-		const input = manualJobInferenceSchema.parse(req.body ?? {});
-		const result = await inferManualJobDetails(input.jobDescription);
+  try {
+    const input = manualJobInferenceSchema.parse(req.body ?? {});
+    const result = await inferManualJobDetails(input.jobDescription);
 
-		ok(res, {
-			job: result.job,
-			warning: result.warning ?? null,
-		});
-	} catch (error) {
-		if (error instanceof z.ZodError) {
-			return fail(res, badRequest(error.message, error.flatten()));
-		}
-		fail(res, toAppError(error));
-	}
+    ok(res, {
+      job: result.job,
+      warning: result.warning ?? null,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(res, badRequest(error.message, error.flatten()));
+    }
+    fail(res, toAppError(error));
+  }
 });
 
 /**
  * POST /api/manual-jobs/import - Import a manually curated job into the DB
  */
 manualJobsRouter.post("/import", async (req: Request, res: Response) => {
-	try {
-		const input = manualJobImportSchema.parse(req.body ?? {});
-		const job = input.job;
+  try {
+    const input = manualJobImportSchema.parse(req.body ?? {});
+    const job = input.job;
 
-		const createdJob = await jobsRepo.createJob({
-			source: "manual",
-			title: job.title.trim(),
-			employer: job.employer.trim(),
-			jobUrl: job.jobUrl.trim(),
-			applicationLink: cleanOptional(job.applicationLink) ?? undefined,
-			location: cleanOptional(job.location) ?? undefined,
-			salary: cleanOptional(job.salary) ?? undefined,
-			deadline: cleanOptional(job.deadline) ?? undefined,
-			jobDescription: job.jobDescription.trim(),
-			jobType: cleanOptional(job.jobType) ?? undefined,
-			jobLevel: cleanOptional(job.jobLevel) ?? undefined,
-			jobFunction: cleanOptional(job.jobFunction) ?? undefined,
-			disciplines: cleanOptional(job.disciplines) ?? undefined,
-			degreeRequired: cleanOptional(job.degreeRequired) ?? undefined,
-			starting: cleanOptional(job.starting) ?? undefined,
-		});
+    const createdJob = await jobsRepo.createJob({
+      source: "manual",
+      title: job.title.trim(),
+      employer: job.employer.trim(),
+      jobUrl: job.jobUrl.trim(),
+      applicationLink: cleanOptional(job.applicationLink) ?? undefined,
+      location: cleanOptional(job.location) ?? undefined,
+      salary: cleanOptional(job.salary) ?? undefined,
+      deadline: cleanOptional(job.deadline) ?? undefined,
+      jobDescription: job.jobDescription.trim(),
+      jobType: cleanOptional(job.jobType) ?? undefined,
+      jobLevel: cleanOptional(job.jobLevel) ?? undefined,
+      jobFunction: cleanOptional(job.jobFunction) ?? undefined,
+      disciplines: cleanOptional(job.disciplines) ?? undefined,
+      degreeRequired: cleanOptional(job.degreeRequired) ?? undefined,
+      starting: cleanOptional(job.starting) ?? undefined,
+    });
 
-		const processResult = await processJob(createdJob.id, {
-			analyticsOrigin: "manual_job_create",
-		});
-		if (!processResult.success) {
-			logger.warn("Manual job auto-processing failed", {
-				jobId: createdJob.id,
-				error: processResult.error ?? "Unknown error",
-			});
-			return fail(
-				res,
-				new AppError({
-					status: 502,
-					code: "UPSTREAM_ERROR",
-					message:
-						processResult.error ||
-						"Imported job but failed to move it to ready automatically",
-					details: { jobId: createdJob.id },
-				}),
-			);
-		}
+    const processResult = await processJob(createdJob.id, {
+      analyticsOrigin: "manual_job_create",
+    });
+    if (!processResult.success) {
+      logger.warn("Manual job auto-processing failed", {
+        jobId: createdJob.id,
+        error: processResult.error ?? "Unknown error",
+      });
+      return fail(
+        res,
+        new AppError({
+          status: 502,
+          code: "UPSTREAM_ERROR",
+          message:
+            processResult.error ||
+            "Imported job but failed to move it to ready automatically",
+          details: { jobId: createdJob.id },
+        }),
+      );
+    }
 
-		const processedJob = await jobsRepo.getJobById(createdJob.id);
-		if (!processedJob) {
-			return fail(res, notFound("Job not found"));
-		}
+    const processedJob = await jobsRepo.getJobById(createdJob.id);
+    if (!processedJob) {
+      return fail(res, notFound("Job not found"));
+    }
 
-		// Score asynchronously so the import returns immediately.
-		(async () => {
-			try {
-				const rawProfile = await getProfile();
-				if (
-					!rawProfile ||
-					typeof rawProfile !== "object" ||
-					Array.isArray(rawProfile)
-				) {
-					throw new Error("Invalid resume profile format");
-				}
-				const profile = rawProfile as Record<string, unknown>;
-				const [{ score, reason }, jobBrief] = await Promise.all([
-					scoreJobSuitability(processedJob, profile),
-					generateJobBrief(processedJob.jobDescription, {
-						jobId: processedJob.id,
-					}),
-				]);
-				await jobsRepo.updateJob(processedJob.id, {
-					suitabilityScore: score,
-					suitabilityReason: reason,
-					jobBrief,
-				});
-			} catch (error) {
-				logger.warn("Manual job scoring failed", {
-					jobId: processedJob.id,
-					error,
-				});
-			}
-		})().catch((error) => {
-			logger.warn("Manual job scoring task failed to start", {
-				jobId: processedJob.id,
-				error,
-			});
-		});
+    // Score asynchronously so the import returns immediately.
+    (async () => {
+      try {
+        const rawProfile = await getProfile();
+        if (
+          !rawProfile ||
+          typeof rawProfile !== "object" ||
+          Array.isArray(rawProfile)
+        ) {
+          throw new Error("Invalid resume profile format");
+        }
+        const profile = rawProfile as Record<string, unknown>;
+        const [{ score, reason }, jobBrief] = await Promise.all([
+          scoreJobSuitability(processedJob, profile),
+          generateJobBrief(processedJob.jobDescription, {
+            jobId: processedJob.id,
+          }),
+        ]);
+        await jobsRepo.updateJob(processedJob.id, {
+          suitabilityScore: score,
+          suitabilityReason: reason,
+          jobBrief,
+        });
+      } catch (error) {
+        logger.warn("Manual job scoring failed", {
+          jobId: processedJob.id,
+          error,
+        });
+      }
+    })().catch((error) => {
+      logger.warn("Manual job scoring task failed to start", {
+        jobId: processedJob.id,
+        error,
+      });
+    });
 
-		ok(res, processedJob);
-	} catch (error) {
-		if (error instanceof z.ZodError) {
-			return fail(res, badRequest(error.message, error.flatten()));
-		}
-		fail(res, toAppError(error));
-	}
+    ok(res, processedJob);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(res, badRequest(error.message, error.flatten()));
+    }
+    fail(res, toAppError(error));
+  }
 });

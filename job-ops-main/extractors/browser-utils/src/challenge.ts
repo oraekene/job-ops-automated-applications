@@ -1,10 +1,10 @@
 import type { Page, Response } from "playwright";
 
 export type ChallengeResult =
-	| { status: "passed" }
-	| { status: "not-a-challenge" }
-	| { status: "failed"; reason: string }
-	| { status: "timeout" };
+  | { status: "passed" }
+  | { status: "not-a-challenge" }
+  | { status: "failed"; reason: string }
+  | { status: "timeout" };
 
 /**
  * Content markers that indicate a Cloudflare challenge page.
@@ -12,14 +12,14 @@ export type ChallengeResult =
  * need updating if Cloudflare changes their challenge page structure.
  */
 const CF_CHALLENGE_MARKERS = [
-	"cf-challenge-running",
-	"cf-turnstile",
-	"Checking your browser",
-	"challenges.cloudflare.com",
-	"Just a moment...",
-	// Cloudflare's "managed challenge" / interstitial
-	"cf-please-wait",
-	"cf_chl_opt",
+  "cf-challenge-running",
+  "cf-turnstile",
+  "Checking your browser",
+  "challenges.cloudflare.com",
+  "Just a moment...",
+  // Cloudflare's "managed challenge" / interstitial
+  "cf-please-wait",
+  "cf_chl_opt",
 ] as const;
 
 /**
@@ -27,13 +27,13 @@ const CF_CHALLENGE_MARKERS = [
  * Works by inspecting page content — no network interception needed.
  */
 export async function isChallengePage(page: Page): Promise<boolean> {
-	try {
-		const html = await page.content();
-		return CF_CHALLENGE_MARKERS.some((marker) => html.includes(marker));
-	} catch {
-		// Page may have navigated or crashed — treat as not a challenge
-		return false;
-	}
+  try {
+    const html = await page.content();
+    return CF_CHALLENGE_MARKERS.some((marker) => html.includes(marker));
+  } catch {
+    // Page may have navigated or crashed — treat as not a challenge
+    return false;
+  }
 }
 
 /**
@@ -41,11 +41,11 @@ export async function isChallengePage(page: Page): Promise<boolean> {
  * Use this to inspect responses from page.goto() or page.waitForResponse().
  */
 export function isChallengeResponse(response: Response): boolean {
-	const status = response.status();
-	// CF challenges typically return 403 or 503 with specific headers
-	if (status !== 403 && status !== 503) return false;
-	const server = response.headers().server ?? "";
-	return server.toLowerCase().includes("cloudflare");
+  const status = response.status();
+  // CF challenges typically return 403 or 503 with specific headers
+  if (status !== 403 && status !== 503) return false;
+  const server = response.headers().server ?? "";
+  return server.toLowerCase().includes("cloudflare");
 }
 
 /**
@@ -60,23 +60,23 @@ export function isChallengeResponse(response: Response): boolean {
  * @param pollIntervalMs - How often to check (default 1s)
  */
 export async function waitForChallengeResolution(
-	page: Page,
-	timeoutMs = 30_000,
-	pollIntervalMs = 1_000,
+  page: Page,
+  timeoutMs = 30_000,
+  pollIntervalMs = 1_000,
 ): Promise<ChallengeResult> {
-	const start = Date.now();
+  const start = Date.now();
 
-	while (Date.now() - start < timeoutMs) {
-		// Check if we've navigated away from the challenge page
-		const stillChallenge = await isChallengePage(page);
-		if (!stillChallenge) {
-			return { status: "passed" };
-		}
+  while (Date.now() - start < timeoutMs) {
+    // Check if we've navigated away from the challenge page
+    const stillChallenge = await isChallengePage(page);
+    if (!stillChallenge) {
+      return { status: "passed" };
+    }
 
-		await page.waitForTimeout(pollIntervalMs);
-	}
+    await page.waitForTimeout(pollIntervalMs);
+  }
 
-	return { status: "timeout" };
+  return { status: "timeout" };
 }
 
 /**
@@ -91,47 +91,47 @@ export async function waitForChallengeResolution(
  * - Reporting what happened
  */
 export async function navigateWithChallenge(
-	page: Page,
-	url: string,
-	options: {
-		waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
-		challengeTimeoutMs?: number;
-		navigationTimeoutMs?: number;
-	} = {},
+  page: Page,
+  url: string,
+  options: {
+    waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+    challengeTimeoutMs?: number;
+    navigationTimeoutMs?: number;
+  } = {},
 ): Promise<{
-	response: Response | null;
-	challengeResult: ChallengeResult;
+  response: Response | null;
+  challengeResult: ChallengeResult;
 }> {
-	const {
-		waitUntil = "domcontentloaded",
-		challengeTimeoutMs = 30_000,
-		navigationTimeoutMs = 30_000,
-	} = options;
+  const {
+    waitUntil = "domcontentloaded",
+    challengeTimeoutMs = 30_000,
+    navigationTimeoutMs = 30_000,
+  } = options;
 
-	const response = await page.goto(url, {
-		waitUntil,
-		timeout: navigationTimeoutMs,
-	});
+  const response = await page.goto(url, {
+    waitUntil,
+    timeout: navigationTimeoutMs,
+  });
 
-	// Check if the response itself is a CF challenge
-	if (response && isChallengeResponse(response)) {
-		const challengeResult = await waitForChallengeResolution(
-			page,
-			challengeTimeoutMs,
-		);
-		return { response, challengeResult };
-	}
+  // Check if the response itself is a CF challenge
+  if (response && isChallengeResponse(response)) {
+    const challengeResult = await waitForChallengeResolution(
+      page,
+      challengeTimeoutMs,
+    );
+    return { response, challengeResult };
+  }
 
-	// Response looked fine HTTP-wise, but page content might still be a challenge.
-	// CF's "managed challenge" variant returns HTTP 200 with challenge HTML —
-	// checking headers alone would miss it.
-	if (await isChallengePage(page)) {
-		const challengeResult = await waitForChallengeResolution(
-			page,
-			challengeTimeoutMs,
-		);
-		return { response, challengeResult };
-	}
+  // Response looked fine HTTP-wise, but page content might still be a challenge.
+  // CF's "managed challenge" variant returns HTTP 200 with challenge HTML —
+  // checking headers alone would miss it.
+  if (await isChallengePage(page)) {
+    const challengeResult = await waitForChallengeResolution(
+      page,
+      challengeTimeoutMs,
+    );
+    return { response, challengeResult };
+  }
 
-	return { response, challengeResult: { status: "not-a-challenge" } };
+  return { response, challengeResult: { status: "not-a-challenge" } };
 }

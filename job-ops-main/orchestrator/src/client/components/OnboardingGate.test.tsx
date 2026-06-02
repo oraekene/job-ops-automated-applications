@@ -5,82 +5,82 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingGate } from "./OnboardingGate";
 
 vi.mock("@client/hooks/useOnboardingRequirement", () => ({
-	useOnboardingRequirement: vi.fn(),
+  useOnboardingRequirement: vi.fn(),
 }));
 
 describe("OnboardingGate", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-	it("redirects incomplete users to the onboarding page", () => {
-		vi.mocked(useOnboardingRequirement).mockReturnValue({
-			checking: false,
-			complete: false,
-		});
+  it("redirects incomplete users to the onboarding page", () => {
+    vi.mocked(useOnboardingRequirement).mockReturnValue({
+      checking: false,
+      complete: false,
+    });
 
-		render(
-			<MemoryRouter initialEntries={["/overview"]}>
-				<OnboardingGate />
-				<Routes>
-					<Route path="/overview" element={<div>overview</div>} />
-					<Route path="/onboarding" element={<div>onboarding</div>} />
-				</Routes>
-			</MemoryRouter>,
-		);
+    render(
+      <MemoryRouter initialEntries={["/overview"]}>
+        <OnboardingGate />
+        <Routes>
+          <Route path="/overview" element={<div>overview</div>} />
+          <Route path="/onboarding" element={<div>onboarding</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-		expect(screen.getByText("onboarding")).toBeInTheDocument();
-	});
+    expect(screen.getByText("onboarding")).toBeInTheDocument();
+  });
 
-	it("does not redirect when the user is already on onboarding", () => {
-		vi.mocked(useOnboardingRequirement).mockReturnValue({
-			checking: false,
-			complete: false,
-		});
+  it("does not redirect when the user is already on onboarding", () => {
+    vi.mocked(useOnboardingRequirement).mockReturnValue({
+      checking: false,
+      complete: false,
+    });
 
-		render(
-			<MemoryRouter initialEntries={["/onboarding"]}>
-				<OnboardingGate />
-				<Routes>
-					<Route path="/onboarding" element={<div>onboarding</div>} />
-				</Routes>
-			</MemoryRouter>,
-		);
+    render(
+      <MemoryRouter initialEntries={["/onboarding"]}>
+        <OnboardingGate />
+        <Routes>
+          <Route path="/onboarding" element={<div>onboarding</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-		expect(screen.getByText("onboarding")).toBeInTheDocument();
-	});
+    expect(screen.getByText("onboarding")).toBeInTheDocument();
+  });
 
-	it("does not check onboarding while the user is on sign-in", () => {
-		render(
-			<MemoryRouter initialEntries={["/sign-in"]}>
-				<OnboardingGate />
-				<Routes>
-					<Route path="/sign-in" element={<div>sign-in</div>} />
-				</Routes>
-			</MemoryRouter>,
-		);
+  it("does not check onboarding while the user is on sign-in", () => {
+    render(
+      <MemoryRouter initialEntries={["/sign-in"]}>
+        <OnboardingGate />
+        <Routes>
+          <Route path="/sign-in" element={<div>sign-in</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-		expect(screen.getByText("sign-in")).toBeInTheDocument();
-		expect(useOnboardingRequirement).not.toHaveBeenCalled();
-	});
+    expect(screen.getByText("sign-in")).toBeInTheDocument();
+    expect(useOnboardingRequirement).not.toHaveBeenCalled();
+  });
 
-	it("does not redirect once onboarding is complete", () => {
-		vi.mocked(useOnboardingRequirement).mockReturnValue({
-			checking: false,
-			complete: true,
-		});
+  it("does not redirect once onboarding is complete", () => {
+    vi.mocked(useOnboardingRequirement).mockReturnValue({
+      checking: false,
+      complete: true,
+    });
 
-		render(
-			<MemoryRouter initialEntries={["/overview"]}>
-				<OnboardingGate />
-				<Routes>
-					<Route path="/overview" element={<div>overview</div>} />
-					<Route path="/onboarding" element={<div>onboarding</div>} />
-				</Routes>
-			</MemoryRouter>,
-		);
+    render(
+      <MemoryRouter initialEntries={["/overview"]}>
+        <OnboardingGate />
+        <Routes>
+          <Route path="/overview" element={<div>overview</div>} />
+          <Route path="/onboarding" element={<div>onboarding</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-		expect(screen.getByText("overview")).toBeInTheDocument();
-		expect(screen.queryByText("onboarding")).not.toBeInTheDocument();
-	});
+    expect(screen.getByText("overview")).toBeInTheDocument();
+    expect(screen.queryByText("onboarding")).not.toBeInTheDocument();
+  });
 });

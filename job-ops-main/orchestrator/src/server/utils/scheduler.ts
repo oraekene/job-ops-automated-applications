@@ -4,20 +4,20 @@
  */
 
 export interface Scheduler {
-	/** Start scheduling at the specified hour (0-23) */
-	start(hour: number): void;
-	/** Stop the scheduler */
-	stop(): void;
-	/** Get ISO string of next scheduled run, or null if not running */
-	getNextRun(): string | null;
-	/** Check if scheduler is currently running */
-	isRunning(): boolean;
+  /** Start scheduling at the specified hour (0-23) */
+  start(hour: number): void;
+  /** Stop the scheduler */
+  stop(): void;
+  /** Get ISO string of next scheduled run, or null if not running */
+  getNextRun(): string | null;
+  /** Check if scheduler is currently running */
+  isRunning(): boolean;
 }
 
 interface SchedulerState {
-	timer: ReturnType<typeof setTimeout> | null;
-	nextRunTime: Date | null;
-	currentHour: number | null;
+  timer: ReturnType<typeof setTimeout> | null;
+  nextRunTime: Date | null;
+  currentHour: number | null;
 }
 
 /**
@@ -26,16 +26,16 @@ interface SchedulerState {
  * @returns Date object set to the next UTC occurrence of that hour
  */
 export function calculateNextTime(hour: number): Date {
-	const now = new Date();
-	const next = new Date(now);
-	next.setUTCHours(hour, 0, 0, 0);
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCHours(hour, 0, 0, 0);
 
-	// If we've passed the time today, schedule for tomorrow
-	if (next <= now) {
-		next.setUTCDate(next.getUTCDate() + 1);
-	}
+  // If we've passed the time today, schedule for tomorrow
+  if (next <= now) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
 
-	return next;
+  return next;
 }
 
 /**
@@ -45,74 +45,74 @@ export function calculateNextTime(hour: number): Date {
  * @returns Scheduler interface with start/stop/getNextRun methods
  */
 export function createScheduler(
-	name: string,
-	callback: () => Promise<void>,
+  name: string,
+  callback: () => Promise<void>,
 ): Scheduler {
-	const state: SchedulerState = {
-		timer: null,
-		nextRunTime: null,
-		currentHour: null,
-	};
+  const state: SchedulerState = {
+    timer: null,
+    nextRunTime: null,
+    currentHour: null,
+  };
 
-	function clearState(): void {
-		if (state.timer) {
-			clearTimeout(state.timer);
-		}
-		state.timer = null;
-		state.nextRunTime = null;
-		state.currentHour = null;
-	}
+  function clearState(): void {
+    if (state.timer) {
+      clearTimeout(state.timer);
+    }
+    state.timer = null;
+    state.nextRunTime = null;
+    state.currentHour = null;
+  }
 
-	function scheduleNext(hour: number): void {
-		// Clear any existing timer
-		if (state.timer) {
-			clearState();
-		}
+  function scheduleNext(hour: number): void {
+    // Clear any existing timer
+    if (state.timer) {
+      clearState();
+    }
 
-		state.currentHour = hour;
-		state.nextRunTime = calculateNextTime(hour);
-		const delay = state.nextRunTime.getTime() - Date.now();
+    state.currentHour = hour;
+    state.nextRunTime = calculateNextTime(hour);
+    const delay = state.nextRunTime.getTime() - Date.now();
 
-		console.log(
-			`⏰ [${name}] Next run scheduled for: ${state.nextRunTime.toISOString()}`,
-		);
+    console.log(
+      `⏰ [${name}] Next run scheduled for: ${state.nextRunTime.toISOString()}`,
+    );
 
-		state.timer = setTimeout(async () => {
-			console.log(`🔄 [${name}] Running scheduled task...`);
-			try {
-				await callback();
-			} catch (error) {
-				console.error(`❌ [${name}] Scheduled task failed:`, error);
-			}
-			// Reschedule for next occurrence
-			scheduleNext(hour);
-		}, delay);
-	}
+    state.timer = setTimeout(async () => {
+      console.log(`🔄 [${name}] Running scheduled task...`);
+      try {
+        await callback();
+      } catch (error) {
+        console.error(`❌ [${name}] Scheduled task failed:`, error);
+      }
+      // Reschedule for next occurrence
+      scheduleNext(hour);
+    }, delay);
+  }
 
-	return {
-		start(hour: number): void {
-			if (state.timer) {
-				console.log(`🔄 [${name}] Restarting scheduler with hour ${hour}...`);
-				clearState();
-			} else {
-				console.log(`🚀 [${name}] Starting scheduler at hour ${hour}...`);
-			}
-			scheduleNext(hour);
-		},
+  return {
+    start(hour: number): void {
+      if (state.timer) {
+        console.log(`🔄 [${name}] Restarting scheduler with hour ${hour}...`);
+        clearState();
+      } else {
+        console.log(`🚀 [${name}] Starting scheduler at hour ${hour}...`);
+      }
+      scheduleNext(hour);
+    },
 
-		stop(): void {
-			if (state.timer) {
-				clearState();
-				console.log(`⏹️ [${name}] Stopped scheduler`);
-			}
-		},
+    stop(): void {
+      if (state.timer) {
+        clearState();
+        console.log(`⏹️ [${name}] Stopped scheduler`);
+      }
+    },
 
-		getNextRun(): string | null {
-			return state.nextRunTime?.toISOString() || null;
-		},
+    getNextRun(): string | null {
+      return state.nextRunTime?.toISOString() || null;
+    },
 
-		isRunning(): boolean {
-			return state.timer !== null;
-		},
-	};
+    isRunning(): boolean {
+      return state.timer !== null;
+    },
+  };
 }

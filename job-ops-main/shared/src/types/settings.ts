@@ -1,55 +1,55 @@
 import {
-	TYPST_THEME_LABELS,
-	TYPST_THEME_VALUES,
+  TYPST_THEME_LABELS,
+  TYPST_THEME_VALUES,
 } from "../generated/typst-themes";
 import type {
-	LocationMatchStrictness,
-	LocationSearchScope,
+  LocationMatchStrictness,
+  LocationSearchScope,
 } from "../location-preferences";
 
 export { TYPST_THEME_LABELS, TYPST_THEME_VALUES };
 
 export interface ResumeProjectCatalogItem {
-	id: string;
-	name: string;
-	description: string;
-	date: string;
-	isVisibleInBase: boolean;
+  id: string;
+  name: string;
+  description: string;
+  date: string;
+  isVisibleInBase: boolean;
 }
 
 export interface ResumeProjectsSettings {
-	maxProjects: number;
-	lockedProjectIds: string[];
-	aiSelectableProjectIds: string[];
+  maxProjects: number;
+  lockedProjectIds: string[];
+  aiSelectableProjectIds: string[];
 }
 
 export const LLM_PROVIDER_VALUES = [
-	"openrouter",
-	"lmstudio",
-	"ollama",
-	"openai",
-	"openai_compatible",
-	"gemini",
-	"gemini_cli",
-	"codex",
+  "openrouter",
+  "lmstudio",
+  "ollama",
+  "openai",
+  "openai_compatible",
+  "gemini",
+  "gemini_cli",
+  "codex",
 ] as const;
 export type LlmProviderId = (typeof LLM_PROVIDER_VALUES)[number];
 
 export const LLM_PURPOSE_VALUES = [
-	"scoring",
-	"tailoring",
-	"projectSelection",
+  "scoring",
+  "tailoring",
+  "projectSelection",
 ] as const;
 export type LlmPurpose = (typeof LLM_PURPOSE_VALUES)[number];
 
 export type LlmPurposeOverride = {
-	provider?: LlmProviderId | null;
-	baseUrl?: string | null;
-	model?: string | null;
+  provider?: LlmProviderId | null;
+  baseUrl?: string | null;
+  model?: string | null;
 };
 
 export type LlmPurposeOverrides = Partial<
-	Record<LlmPurpose, LlmPurposeOverride>
+  Record<LlmPurpose, LlmPurposeOverride>
 >;
 
 export type LlmPurposeApiKeys = Partial<Record<LlmPurpose, string | null>>;
@@ -58,214 +58,214 @@ export type LlmPurposeApiKeyHints = Partial<Record<LlmPurpose, string | null>>;
 export const PDF_RENDERER_VALUES = ["rxresume", "latex", "typst"] as const;
 export type PdfRenderer = (typeof PDF_RENDERER_VALUES)[number];
 export const PDF_RENDERER_LABELS: Record<PdfRenderer, string> = {
-	rxresume: "RxResume export",
-	latex: "Local LaTeX (Jake template)",
-	typst: "Local Typst",
+  rxresume: "RxResume export",
+  latex: "Local LaTeX (Jake template)",
+  typst: "Local Typst",
 };
 
 export type TypstTheme = (typeof TYPST_THEME_VALUES)[number];
 
 export const CHAT_STYLE_LANGUAGE_MODE_VALUES = [
-	"manual",
-	"match-resume",
+  "manual",
+  "match-resume",
 ] as const;
 
 export type ChatStyleLanguageMode =
-	(typeof CHAT_STYLE_LANGUAGE_MODE_VALUES)[number];
+  (typeof CHAT_STYLE_LANGUAGE_MODE_VALUES)[number];
 
 export const CHAT_STYLE_MANUAL_LANGUAGE_VALUES = [
-	"english",
-	"german",
-	"french",
-	"spanish",
+  "english",
+  "german",
+  "french",
+  "spanish",
 ] as const;
 
 export type ChatStyleManualLanguage =
-	(typeof CHAT_STYLE_MANUAL_LANGUAGE_VALUES)[number];
+  (typeof CHAT_STYLE_MANUAL_LANGUAGE_VALUES)[number];
 
 export const CHAT_STYLE_MANUAL_LANGUAGE_LABELS: Record<
-	ChatStyleManualLanguage,
-	string
+  ChatStyleManualLanguage,
+  string
 > = {
-	english: "English",
-	german: "German",
-	french: "French",
-	spanish: "Spanish",
+  english: "English",
+  german: "German",
+  french: "French",
+  spanish: "Spanish",
 };
 
 export interface ResumeProfile {
-	basics?: {
-		name?: string;
-		label?: string;
-		image?: string;
-		email?: string;
-		phone?: string;
-		url?: string;
-		summary?: string;
-		headline?: string;
-		location?: {
-			address?: string;
-			postalCode?: string;
-			city?: string;
-			countryCode?: string;
-			region?: string;
-		};
-		profiles?: Array<{
-			network?: string;
-			username?: string;
-			url?: string;
-		}>;
-	};
-	sections?: {
-		summary?: {
-			id?: string;
-			visible?: boolean;
-			name?: string;
-			content?: string;
-		};
-		skills?: {
-			id?: string;
-			visible?: boolean;
-			name?: string;
-			items?: Array<{
-				id: string;
-				name: string;
-				description: string;
-				level: number;
-				keywords: string[];
-				visible: boolean;
-			}>;
-		};
-		projects?: {
-			id?: string;
-			visible?: boolean;
-			name?: string;
-			items?: Array<{
-				id: string;
-				name: string;
-				description: string;
-				date: string;
-				summary: string;
-				visible: boolean;
-				keywords?: string[];
-				url?: string;
-			}>;
-		};
-		experience?: {
-			id?: string;
-			visible?: boolean;
-			name?: string;
-			items?: Array<{
-				id: string;
-				company: string;
-				position: string;
-				location: string;
-				date: string;
-				summary: string;
-				visible: boolean;
-			}>;
-		};
-		[key: string]: unknown;
-	};
-	[key: string]: unknown;
+  basics?: {
+    name?: string;
+    label?: string;
+    image?: string;
+    email?: string;
+    phone?: string;
+    url?: string;
+    summary?: string;
+    headline?: string;
+    location?: {
+      address?: string;
+      postalCode?: string;
+      city?: string;
+      countryCode?: string;
+      region?: string;
+    };
+    profiles?: Array<{
+      network?: string;
+      username?: string;
+      url?: string;
+    }>;
+  };
+  sections?: {
+    summary?: {
+      id?: string;
+      visible?: boolean;
+      name?: string;
+      content?: string;
+    };
+    skills?: {
+      id?: string;
+      visible?: boolean;
+      name?: string;
+      items?: Array<{
+        id: string;
+        name: string;
+        description: string;
+        level: number;
+        keywords: string[];
+        visible: boolean;
+      }>;
+    };
+    projects?: {
+      id?: string;
+      visible?: boolean;
+      name?: string;
+      items?: Array<{
+        id: string;
+        name: string;
+        description: string;
+        date: string;
+        summary: string;
+        visible: boolean;
+        keywords?: string[];
+        url?: string;
+      }>;
+    };
+    experience?: {
+      id?: string;
+      visible?: boolean;
+      name?: string;
+      items?: Array<{
+        id: string;
+        company: string;
+        position: string;
+        location: string;
+        date: string;
+        summary: string;
+        visible: boolean;
+      }>;
+    };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 }
 
 export interface ProfileStatusResponse {
-	exists: boolean;
-	error: string | null;
+  exists: boolean;
+  error: string | null;
 }
 
 export interface ValidationResult {
-	valid: boolean;
-	message: string | null;
-	status?: number | null;
+  valid: boolean;
+  message: string | null;
+  status?: number | null;
 }
 
 export interface SearchTermsSuggestionResponse {
-	terms: string[];
-	source: "ai" | "fallback";
+  terms: string[];
+  source: "ai" | "fallback";
 }
 
 export interface DemoInfoResponse {
-	demoMode: boolean;
-	resetCadenceHours: number;
-	lastResetAt: string | null;
-	nextResetAt: string | null;
-	baselineVersion: string | null;
-	baselineName: string | null;
+  demoMode: boolean;
+  resetCadenceHours: number;
+  lastResetAt: string | null;
+  nextResetAt: string | null;
+  baselineVersion: string | null;
+  baselineName: string | null;
 }
 
 export type Resolved<T> = { value: T; default: T; override: T | null };
 export type ModelResolved = { value: string; override: string | null };
 
 export interface AppSettings {
-	// Typed settings (Resolved):
-	model: Resolved<string>;
-	llmProvider: Resolved<string>;
-	llmBaseUrl: Resolved<string>;
-	llmPurposeOverrides: Resolved<LlmPurposeOverrides>;
-	pipelineWebhookUrl: Resolved<string>;
-	jobCompleteWebhookUrl: Resolved<string>;
-	resumeProjects: Resolved<ResumeProjectsSettings>;
-	pdfRenderer: Resolved<PdfRenderer>;
-	typstTheme: Resolved<TypstTheme>;
-	ukvisajobsMaxJobs: Resolved<number>;
-	adzunaMaxJobsPerTerm: Resolved<number>;
-	gradcrackerMaxJobsPerTerm: Resolved<number>;
-	startupjobsMaxJobsPerTerm: Resolved<number>;
-	seekMaxJobsPerTerm: Resolved<number>;
-	naukriMaxJobsPerTerm: Resolved<number>;
-	jobindexMaxJobsPerTerm: Resolved<number>;
-	searchTerms: Resolved<string[]>;
-	workplaceTypes: Resolved<Array<"remote" | "hybrid" | "onsite">>;
-	blockedCompanyKeywords: Resolved<string[]>;
-	scoringInstructions: Resolved<string>;
-	ghostwriterSystemPromptTemplate: Resolved<string>;
-	ghostwriterStopSlopEnabled: Resolved<boolean>;
-	tailoringPromptTemplate: Resolved<string>;
-	scoringPromptTemplate: Resolved<string>;
-	searchCities: Resolved<string>;
-	locationSearchScope: Resolved<LocationSearchScope>;
-	locationMatchStrictness: Resolved<LocationMatchStrictness>;
-	jobspyResultsWanted: Resolved<number>;
-	jobspyCountryIndeed: Resolved<string>;
-	showSponsorInfo: Resolved<boolean>;
-	renderMarkdownInJobDescriptions: Resolved<boolean>;
-	chatStyleTone: Resolved<string>;
-	chatStyleFormality: Resolved<string>;
-	chatStyleConstraints: Resolved<string>;
-	chatStyleDoNotUse: Resolved<string>;
-	chatStyleLanguageMode: Resolved<ChatStyleLanguageMode>;
-	chatStyleManualLanguage: Resolved<ChatStyleManualLanguage>;
-	chatStyleSummaryMaxWords: Resolved<number | null>;
-	chatStyleMaxKeywordsPerSkill: Resolved<number | null>;
-	backupEnabled: Resolved<boolean>;
-	backupHour: Resolved<number>;
-	backupMaxCount: Resolved<number>;
-	penalizeMissingSalary: Resolved<boolean>;
-	missingSalaryPenalty: Resolved<number>;
-	autoSkipScoreThreshold: Resolved<number | null>;
+  // Typed settings (Resolved):
+  model: Resolved<string>;
+  llmProvider: Resolved<string>;
+  llmBaseUrl: Resolved<string>;
+  llmPurposeOverrides: Resolved<LlmPurposeOverrides>;
+  pipelineWebhookUrl: Resolved<string>;
+  jobCompleteWebhookUrl: Resolved<string>;
+  resumeProjects: Resolved<ResumeProjectsSettings>;
+  pdfRenderer: Resolved<PdfRenderer>;
+  typstTheme: Resolved<TypstTheme>;
+  ukvisajobsMaxJobs: Resolved<number>;
+  adzunaMaxJobsPerTerm: Resolved<number>;
+  gradcrackerMaxJobsPerTerm: Resolved<number>;
+  startupjobsMaxJobsPerTerm: Resolved<number>;
+  seekMaxJobsPerTerm: Resolved<number>;
+  naukriMaxJobsPerTerm: Resolved<number>;
+  jobindexMaxJobsPerTerm: Resolved<number>;
+  searchTerms: Resolved<string[]>;
+  workplaceTypes: Resolved<Array<"remote" | "hybrid" | "onsite">>;
+  blockedCompanyKeywords: Resolved<string[]>;
+  scoringInstructions: Resolved<string>;
+  ghostwriterSystemPromptTemplate: Resolved<string>;
+  ghostwriterStopSlopEnabled: Resolved<boolean>;
+  tailoringPromptTemplate: Resolved<string>;
+  scoringPromptTemplate: Resolved<string>;
+  searchCities: Resolved<string>;
+  locationSearchScope: Resolved<LocationSearchScope>;
+  locationMatchStrictness: Resolved<LocationMatchStrictness>;
+  jobspyResultsWanted: Resolved<number>;
+  jobspyCountryIndeed: Resolved<string>;
+  showSponsorInfo: Resolved<boolean>;
+  renderMarkdownInJobDescriptions: Resolved<boolean>;
+  chatStyleTone: Resolved<string>;
+  chatStyleFormality: Resolved<string>;
+  chatStyleConstraints: Resolved<string>;
+  chatStyleDoNotUse: Resolved<string>;
+  chatStyleLanguageMode: Resolved<ChatStyleLanguageMode>;
+  chatStyleManualLanguage: Resolved<ChatStyleManualLanguage>;
+  chatStyleSummaryMaxWords: Resolved<number | null>;
+  chatStyleMaxKeywordsPerSkill: Resolved<number | null>;
+  backupEnabled: Resolved<boolean>;
+  backupHour: Resolved<number>;
+  backupMaxCount: Resolved<number>;
+  penalizeMissingSalary: Resolved<boolean>;
+  missingSalaryPenalty: Resolved<number>;
+  autoSkipScoreThreshold: Resolved<number | null>;
 
-	// Model variants (no own default, fallback to model.value):
-	modelScorer: ModelResolved;
-	modelTailoring: ModelResolved;
-	modelProjectSelection: ModelResolved;
+  // Model variants (no own default, fallback to model.value):
+  modelScorer: ModelResolved;
+  modelTailoring: ModelResolved;
+  modelProjectSelection: ModelResolved;
 
-	// Simple strings:
-	rxresumeBaseResumeId: string | null;
-	rxresumeUrl: string | null;
-	ukvisajobsEmail: string | null;
-	adzunaAppId: string | null;
+  // Simple strings:
+  rxresumeBaseResumeId: string | null;
+  rxresumeUrl: string | null;
+  ukvisajobsEmail: string | null;
+  adzunaAppId: string | null;
 
-	// Secret hints:
-	llmApiKeyHint: string | null;
-	llmPurposeApiKeyHints: LlmPurposeApiKeyHints;
-	rxresumeApiKeyHint: string | null;
-	ukvisajobsPasswordHint: string | null;
-	adzunaAppKeyHint: string | null;
-	apifyTokenHint: string | null;
-	webhookSecretHint: string | null;
+  // Secret hints:
+  llmApiKeyHint: string | null;
+  llmPurposeApiKeyHints: LlmPurposeApiKeyHints;
+  rxresumeApiKeyHint: string | null;
+  ukvisajobsPasswordHint: string | null;
+  adzunaAppKeyHint: string | null;
+  apifyTokenHint: string | null;
+  webhookSecretHint: string | null;
 
-	// Computed:
-	profileProjects: ResumeProjectCatalogItem[];
+  // Computed:
+  profileProjects: ResumeProjectCatalogItem[];
 }

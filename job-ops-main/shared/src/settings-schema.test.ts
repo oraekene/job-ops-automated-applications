@@ -2,199 +2,199 @@ import { describe, expect, it } from "vitest";
 import { updateSettingsSchema } from "./settings-schema";
 
 describe("updateSettingsSchema", () => {
-	it("does not expose legacy Basic Auth update fields", () => {
-		expect(
-			updateSettingsSchema.parse({
-				enableBasicAuth: true,
-				basicAuthUser: "admin",
-				basicAuthPassword: "secret",
-				onboardingBasicAuthDecision: "enabled",
-			}),
-		).toEqual({});
-	});
+  it("does not expose legacy Basic Auth update fields", () => {
+    expect(
+      updateSettingsSchema.parse({
+        enableBasicAuth: true,
+        basicAuthUser: "admin",
+        basicAuthPassword: "secret",
+        onboardingBasicAuthDecision: "enabled",
+      }),
+    ).toEqual({});
+  });
 
-	it("accepts supported PDF renderer values and rejects unsupported ones", () => {
-		expect(
-			updateSettingsSchema.parse({
-				pdfRenderer: "latex",
-			}),
-		).toEqual({
-			pdfRenderer: "latex",
-		});
+  it("accepts supported PDF renderer values and rejects unsupported ones", () => {
+    expect(
+      updateSettingsSchema.parse({
+        pdfRenderer: "latex",
+      }),
+    ).toEqual({
+      pdfRenderer: "latex",
+    });
 
-		expect(
-			updateSettingsSchema.parse({
-				pdfRenderer: "typst",
-			}),
-		).toEqual({
-			pdfRenderer: "typst",
-		});
+    expect(
+      updateSettingsSchema.parse({
+        pdfRenderer: "typst",
+      }),
+    ).toEqual({
+      pdfRenderer: "typst",
+    });
 
-		expect(
-			updateSettingsSchema.parse({
-				pdfRenderer: null,
-			}),
-		).toEqual({
-			pdfRenderer: null,
-		});
+    expect(
+      updateSettingsSchema.parse({
+        pdfRenderer: null,
+      }),
+    ).toEqual({
+      pdfRenderer: null,
+    });
 
-		const result = updateSettingsSchema.safeParse({
-			pdfRenderer: "custom",
-		});
+    const result = updateSettingsSchema.safeParse({
+      pdfRenderer: "custom",
+    });
 
-		expect(result.success).toBe(false);
-		if (result.success) {
-			return;
-		}
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
 
-		expect(result.error.flatten().fieldErrors.pdfRenderer).toBeDefined();
-	});
+    expect(result.error.flatten().fieldErrors.pdfRenderer).toBeDefined();
+  });
 
-	it("accepts supported Typst theme values and rejects unsupported ones", () => {
-		expect(
-			updateSettingsSchema.parse({
-				typstTheme: "compact",
-			}),
-		).toEqual({
-			typstTheme: "compact",
-		});
+  it("accepts supported Typst theme values and rejects unsupported ones", () => {
+    expect(
+      updateSettingsSchema.parse({
+        typstTheme: "compact",
+      }),
+    ).toEqual({
+      typstTheme: "compact",
+    });
 
-		expect(
-			updateSettingsSchema.parse({
-				typstTheme: null,
-			}),
-		).toEqual({
-			typstTheme: null,
-		});
+    expect(
+      updateSettingsSchema.parse({
+        typstTheme: null,
+      }),
+    ).toEqual({
+      typstTheme: null,
+    });
 
-		const result = updateSettingsSchema.safeParse({
-			typstTheme: "ornate",
-		});
+    const result = updateSettingsSchema.safeParse({
+      typstTheme: "ornate",
+    });
 
-		expect(result.success).toBe(false);
-		if (result.success) {
-			return;
-		}
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
 
-		expect(result.error.flatten().fieldErrors.typstTheme).toBeDefined();
-	});
+    expect(result.error.flatten().fieldErrors.typstTheme).toBeDefined();
+  });
 
-	it("accepts supported language mode and manual language values", () => {
-		expect(
-			updateSettingsSchema.parse({
-				chatStyleLanguageMode: "manual",
-				chatStyleManualLanguage: "german",
-			}),
-		).toEqual({
-			chatStyleLanguageMode: "manual",
-			chatStyleManualLanguage: "german",
-		});
+  it("accepts supported language mode and manual language values", () => {
+    expect(
+      updateSettingsSchema.parse({
+        chatStyleLanguageMode: "manual",
+        chatStyleManualLanguage: "german",
+      }),
+    ).toEqual({
+      chatStyleLanguageMode: "manual",
+      chatStyleManualLanguage: "german",
+    });
 
-		expect(
-			updateSettingsSchema.parse({
-				chatStyleLanguageMode: null,
-				chatStyleManualLanguage: null,
-			}),
-		).toEqual({
-			chatStyleLanguageMode: null,
-			chatStyleManualLanguage: null,
-		});
-	});
+    expect(
+      updateSettingsSchema.parse({
+        chatStyleLanguageMode: null,
+        chatStyleManualLanguage: null,
+      }),
+    ).toEqual({
+      chatStyleLanguageMode: null,
+      chatStyleManualLanguage: null,
+    });
+  });
 
-	it("rejects unsupported language mode and manual language values", () => {
-		const result = updateSettingsSchema.safeParse({
-			chatStyleLanguageMode: "auto",
-			chatStyleManualLanguage: "italian",
-		});
+  it("rejects unsupported language mode and manual language values", () => {
+    const result = updateSettingsSchema.safeParse({
+      chatStyleLanguageMode: "auto",
+      chatStyleManualLanguage: "italian",
+    });
 
-		expect(result.success).toBe(false);
+    expect(result.success).toBe(false);
 
-		if (result.success) {
-			return;
-		}
+    if (result.success) {
+      return;
+    }
 
-		expect(
-			result.error.flatten().fieldErrors.chatStyleLanguageMode,
-		).toBeDefined();
-		expect(
-			result.error.flatten().fieldErrors.chatStyleManualLanguage,
-		).toBeDefined();
-	});
+    expect(
+      result.error.flatten().fieldErrors.chatStyleLanguageMode,
+    ).toBeDefined();
+    expect(
+      result.error.flatten().fieldErrors.chatStyleManualLanguage,
+    ).toBeDefined();
+  });
 
-	it("accepts a nullable rxresumeUrl and rejects invalid URLs", () => {
-		expect(
-			updateSettingsSchema.parse({
-				rxresumeUrl: "https://resume.example.com",
-			}),
-		).toEqual({
-			rxresumeUrl: "https://resume.example.com",
-		});
+  it("accepts a nullable rxresumeUrl and rejects invalid URLs", () => {
+    expect(
+      updateSettingsSchema.parse({
+        rxresumeUrl: "https://resume.example.com",
+      }),
+    ).toEqual({
+      rxresumeUrl: "https://resume.example.com",
+    });
 
-		expect(
-			updateSettingsSchema.parse({
-				rxresumeUrl: null,
-			}),
-		).toEqual({
-			rxresumeUrl: null,
-		});
+    expect(
+      updateSettingsSchema.parse({
+        rxresumeUrl: null,
+      }),
+    ).toEqual({
+      rxresumeUrl: null,
+    });
 
-		const result = updateSettingsSchema.safeParse({
-			rxresumeUrl: "not-a-url",
-		});
+    const result = updateSettingsSchema.safeParse({
+      rxresumeUrl: "not-a-url",
+    });
 
-		expect(result.success).toBe(false);
-		if (result.success) {
-			return;
-		}
-		expect(result.error.flatten().fieldErrors.rxresumeUrl).toBeDefined();
-	});
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+    expect(result.error.flatten().fieldErrors.rxresumeUrl).toBeDefined();
+  });
 
-	it("accepts prompt template overrides up to 12000 characters", () => {
-		const prompt = "A".repeat(12000);
+  it("accepts prompt template overrides up to 12000 characters", () => {
+    const prompt = "A".repeat(12000);
 
-		expect(
-			updateSettingsSchema.parse({
-				ghostwriterSystemPromptTemplate: prompt,
-				tailoringPromptTemplate: prompt,
-				scoringPromptTemplate: prompt,
-			}),
-		).toEqual({
-			ghostwriterSystemPromptTemplate: prompt,
-			tailoringPromptTemplate: prompt,
-			scoringPromptTemplate: prompt,
-		});
-	});
+    expect(
+      updateSettingsSchema.parse({
+        ghostwriterSystemPromptTemplate: prompt,
+        tailoringPromptTemplate: prompt,
+        scoringPromptTemplate: prompt,
+      }),
+    ).toEqual({
+      ghostwriterSystemPromptTemplate: prompt,
+      tailoringPromptTemplate: prompt,
+      scoringPromptTemplate: prompt,
+    });
+  });
 
-	it("accepts the Ghostwriter Stop Slop toggle", () => {
-		expect(
-			updateSettingsSchema.parse({
-				ghostwriterStopSlopEnabled: true,
-			}),
-		).toEqual({
-			ghostwriterStopSlopEnabled: true,
-		});
+  it("accepts the Ghostwriter Stop Slop toggle", () => {
+    expect(
+      updateSettingsSchema.parse({
+        ghostwriterStopSlopEnabled: true,
+      }),
+    ).toEqual({
+      ghostwriterStopSlopEnabled: true,
+    });
 
-		expect(
-			updateSettingsSchema.parse({
-				ghostwriterStopSlopEnabled: null,
-			}),
-		).toEqual({
-			ghostwriterStopSlopEnabled: null,
-		});
-	});
+    expect(
+      updateSettingsSchema.parse({
+        ghostwriterStopSlopEnabled: null,
+      }),
+    ).toEqual({
+      ghostwriterStopSlopEnabled: null,
+    });
+  });
 
-	it("rejects prompt template overrides above 12000 characters", () => {
-		const result = updateSettingsSchema.safeParse({
-			ghostwriterSystemPromptTemplate: "A".repeat(12001),
-		});
+  it("rejects prompt template overrides above 12000 characters", () => {
+    const result = updateSettingsSchema.safeParse({
+      ghostwriterSystemPromptTemplate: "A".repeat(12001),
+    });
 
-		expect(result.success).toBe(false);
-		if (result.success) {
-			return;
-		}
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
 
-		expect(
-			result.error.flatten().fieldErrors.ghostwriterSystemPromptTemplate,
-		).toBeDefined();
-	});
+    expect(
+      result.error.flatten().fieldErrors.ghostwriterSystemPromptTemplate,
+    ).toBeDefined();
+  });
 });

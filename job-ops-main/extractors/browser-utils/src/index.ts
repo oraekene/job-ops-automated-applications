@@ -11,29 +11,29 @@
  */
 
 export {
-	type ChallengeResult,
-	isChallengePage,
-	isChallengeResponse,
-	navigateWithChallenge,
-	waitForChallengeResolution,
+  type ChallengeResult,
+  isChallengePage,
+  isChallengeResponse,
+  navigateWithChallenge,
+  waitForChallengeResolution,
 } from "./challenge.js";
 export {
-	type CookieJarInfo,
-	getCloudflareCookieStorageDir,
-	invalidateCookies,
-	loadCookies,
-	readCookieJar,
-	saveCookies,
+  type CookieJarInfo,
+  getCloudflareCookieStorageDir,
+  invalidateCookies,
+  loadCookies,
+  readCookieJar,
+  saveCookies,
 } from "./cookies.js";
 export {
-	type BrowserLaunchOptions,
-	createLaunchOptions,
+  type BrowserLaunchOptions,
+  createLaunchOptions,
 } from "./launch.js";
 export {
-	type NavigateWithRetryOptions,
-	type NavigateWithRetryResult,
-	navigateWithRetry,
-	type RetryOptions,
-	withRetry,
+  type NavigateWithRetryOptions,
+  type NavigateWithRetryResult,
+  navigateWithRetry,
+  type RetryOptions,
+  withRetry,
 } from "./retry.js";
 export { type SolverResult, solveChallenge } from "./solver.js";
