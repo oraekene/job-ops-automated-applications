@@ -337,7 +337,7 @@
     {
       "id": "US-007",
       "title": "buildPayload: generate tailored PDF and return base64",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-006"
       ],

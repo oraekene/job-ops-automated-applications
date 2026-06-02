@@ -1,10 +1,11 @@
-import { notFound } from "@infra/errors";
+import { readFile } from "node:fs/promises";
+import { notFound, unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
-import { getJobByUrl } from "../repositories/jobs";
+import { getJobById, getJobByUrl } from "../repositories/jobs";
 import { generateScreeningAnswersForJob } from "./ghostwriter";
-import { pdfExists } from "./pdf";
+import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { scoreJobSuitability } from "./scorer";
 
@@ -100,18 +101,19 @@ export const applicationService = {
       customQuestions: JSON.stringify(customQuestions),
     });
 
-    const screening_answers = await buildScreeningAnswers(
-      jobId,
-      customQuestions,
-    );
+    const [screening_answers, { resume_pdf_base64, resume_filename }] =
+      await Promise.all([
+        buildScreeningAnswers(jobId, customQuestions),
+        buildTailoredPdf(jobId),
+      ]);
 
     return {
       applicationId: app.id,
       fields: {},
       cover_letter: "",
       screening_answers,
-      resume_pdf_base64: "",
-      resume_filename: "resume.pdf",
+      resume_pdf_base64,
+      resume_filename,
     };
   },
 
@@ -211,6 +213,29 @@ async function buildScreeningAnswers(
     });
     return Object.fromEntries(customQuestions.map((q) => [q, ""]));
   }
+}
+
+async function buildTailoredPdf(
+  jobId: string,
+): Promise<{ resume_pdf_base64: string; resume_filename: string }> {
+  const job = await getJobById(jobId);
+  if (!job) {
+    throw unprocessableEntity(`Job ${jobId} not found for PDF generation`);
+  }
+
+  const result = await generatePdf(jobId, {}, job.jobDescription ?? "");
+  if (!result.success) {
+    throw unprocessableEntity(
+      `PDF generation failed: ${result.error ?? "unknown error"}`,
+    );
+  }
+
+  const pdfPath = getPdfPath(jobId);
+  const bytes = await readFile(pdfPath);
+  return {
+    resume_pdf_base64: bytes.toString("base64"),
+    resume_filename: `resume_${jobId}.pdf`,
+  };
 }
 
 async function resolveSuitabilityScore(
