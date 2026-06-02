@@ -4,10 +4,14 @@ import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
 import { getJobById, getJobByUrl } from "../repositories/jobs";
-import { generateScreeningAnswersForJob } from "./ghostwriter";
+import {
+  generateCoverLetterForJob,
+  generateScreeningAnswersForJob,
+} from "./ghostwriter";
 import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { scoreJobSuitability } from "./scorer";
+import { getEffectiveSettings } from "./settings";
 
 export interface PrepProfile {
   first_name: string;
@@ -90,6 +94,16 @@ export const applicationService = {
     atsType: string,
     customQuestions: string[],
   ): Promise<PayloadResult> {
+    const profile = await loadProfileOrThrow(jobId);
+    const fields = await buildPayloadFields(profile);
+    const cover_letter = await buildCoverLetter(jobId, profile);
+    const screening_answers = await buildScreeningAnswers(
+      jobId,
+      customQuestions,
+    );
+    const { resume_pdf_base64, resume_filename } =
+      await buildTailoredPdf(jobId);
+
     const app = applicationRepository.create({
       jobId,
       atsType: atsType as "greenhouse" | "lever",
@@ -99,18 +113,14 @@ export const applicationService = {
     applicationRepository.update(app.id, {
       status: "ready_for_review",
       customQuestions: JSON.stringify(customQuestions),
+      fieldPayload: JSON.stringify(fields),
+      screeningAnswers: JSON.stringify(screening_answers),
     });
-
-    const [screening_answers, { resume_pdf_base64, resume_filename }] =
-      await Promise.all([
-        buildScreeningAnswers(jobId, customQuestions),
-        buildTailoredPdf(jobId),
-      ]);
 
     return {
       applicationId: app.id,
-      fields: {},
-      cover_letter: "",
+      fields,
+      cover_letter,
       screening_answers,
       resume_pdf_base64,
       resume_filename,
@@ -236,6 +246,64 @@ async function buildTailoredPdf(
     resume_pdf_base64: bytes.toString("base64"),
     resume_filename: `resume_${jobId}.pdf`,
   };
+}
+
+async function loadProfileOrThrow(jobId: string): Promise<ResumeProfile> {
+  let profile: ResumeProfile | null = null;
+  try {
+    profile = await getProfile();
+  } catch (error) {
+    logger.warn("buildPayload: getProfile failed, throwing 404", {
+      jobId,
+      error,
+    });
+  }
+  if (!profile) {
+    throw notFound("Profile not loaded. Complete onboarding first.");
+  }
+  return profile;
+}
+
+async function buildPayloadFields(
+  profile: ResumeProfile,
+): Promise<Record<string, string>> {
+  const settings = await getEffectiveSettings();
+  const prep = mapProfileToPrepProfile(profile);
+  if (!prep) {
+    throw notFound("Profile is missing required fields (name, email).");
+  }
+  return {
+    first_name: prep.first_name,
+    last_name: prep.last_name,
+    email: prep.email,
+    phone: prep.phone,
+    linkedin_url: prep.linkedin_url,
+    current_company: prep.current_company,
+    salary: settings.autoApplicationSalaryRequirement?.value ?? "",
+  };
+}
+
+async function buildCoverLetter(
+  jobId: string,
+  profile: ResumeProfile,
+): Promise<string> {
+  const settings = await getEffectiveSettings();
+  const profileRecord = profile as unknown as Record<string, unknown>;
+  try {
+    const letter = await generateCoverLetterForJob({
+      jobId,
+      profile: profileRecord,
+    });
+    if (letter && letter.trim().length > 0) {
+      return letter;
+    }
+  } catch (error) {
+    logger.warn("buildPayload: Ghostwriter cover letter failed, falling back", {
+      jobId,
+      error,
+    });
+  }
+  return settings.autoApplicationDefaultCoverLetter?.value ?? "";
 }
 
 async function resolveSuitabilityScore(

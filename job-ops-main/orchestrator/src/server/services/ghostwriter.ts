@@ -1335,6 +1335,18 @@ const SCREENING_ANSWERS_SCHEMA: JsonSchemaDefinition = {
   },
 };
 
+const COVER_LETTER_SCHEMA: JsonSchemaDefinition = {
+  name: "cover_letter",
+  schema: {
+    type: "object",
+    properties: {
+      letter: { type: "string" },
+    },
+    required: ["letter"],
+    additionalProperties: false,
+  },
+};
+
 /**
  * Generate screening answers for the supplied custom questions using the
  * existing Ghostwriter LLM machinery. Returns a `{ question: answer }` map
@@ -1416,5 +1428,65 @@ function buildScreeningAnswersPrompt(
     questionsList,
     "",
     'Return JSON of the form {"answers": { "<question>": "<answer>", ... }}.',
+  ].join("\n");
+}
+
+/**
+ * Generate a tailored cover letter for the given job and profile using the
+ * existing Ghostwriter LLM machinery. Returns the letter body as a string.
+ */
+export async function generateCoverLetterForJob(input: {
+  jobId: string;
+  profile: Record<string, unknown>;
+}): Promise<string> {
+  const job = await jobsRepo.getJobById(input.jobId);
+  if (!job) {
+    throw notFound(`Job ${input.jobId} not found for cover letter`);
+  }
+
+  const llmConfig = await resolveLlmRuntimeSettings();
+  const prompt = buildCoverLetterPrompt(job, input.profile);
+
+  const llm = new LlmService({
+    provider: llmConfig.provider,
+    baseUrl: llmConfig.baseUrl,
+    apiKey: llmConfig.apiKey,
+  });
+
+  const llmResult = await llm.callJson<{ letter: string }>({
+    model: llmConfig.model,
+    messages: [
+      { role: "system", content: COVER_LETTER_SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ],
+    jsonSchema: COVER_LETTER_SCHEMA,
+    jobId: input.jobId,
+  });
+
+  if (!llmResult.success) {
+    throw upstreamError(
+      `Cover letter generation failed: ${llmResult.error ?? "unknown error"}`,
+    );
+  }
+
+  return typeof llmResult.data.letter === "string"
+    ? llmResult.data.letter.trim()
+    : "";
+}
+
+const COVER_LETTER_SYSTEM_PROMPT = `You are writing a concise, role-specific cover letter for a job application. You will be given a job description and the candidate's resume profile. Write a 3-4 paragraph letter that connects the candidate's most relevant experience to the role, names the company, and ends with a clear call to action. Do not invent experience the profile does not support. Keep the tone professional and warm. Return JSON of the form {"letter": "<full letter body>"}.`;
+
+function buildCoverLetterPrompt(
+  job: { title?: string; employer?: string; jobDescription?: string | null },
+  profile: Record<string, unknown>,
+): string {
+  return [
+    `Job: ${job.title ?? "Unknown"} at ${job.employer ?? "Unknown"}`,
+    job.jobDescription
+      ? `Job description:\n${job.jobDescription}`
+      : "Job description: (not available)",
+    "",
+    "Candidate profile (JSON):",
+    JSON.stringify(profile, null, 2),
   ].join("\n");
 }

@@ -353,7 +353,7 @@
     {
       "id": "US-008",
       "title": "buildPayload: assemble fields and persist application row",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-007"
       ],

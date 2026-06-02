@@ -245,6 +245,8 @@ export interface AppSettings {
   penalizeMissingSalary: Resolved<boolean>;
   missingSalaryPenalty: Resolved<number>;
   autoSkipScoreThreshold: Resolved<number | null>;
+  autoApplicationDefaultCoverLetter: Resolved<string>;
+  autoApplicationSalaryRequirement: Resolved<string>;
 
   // Model variants (no own default, fallback to model.value):
   modelScorer: ModelResolved;
