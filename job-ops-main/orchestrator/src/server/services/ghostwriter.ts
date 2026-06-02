@@ -1319,3 +1319,102 @@ export async function cancelRunForJob(input: {
     runId: input.runId,
   });
 }
+
+const SCREENING_ANSWERS_SCHEMA: JsonSchemaDefinition = {
+  name: "screening_answers",
+  schema: {
+    type: "object",
+    properties: {
+      answers: {
+        type: "object",
+        additionalProperties: { type: "string" },
+      },
+    },
+    required: ["answers"],
+    additionalProperties: false,
+  },
+};
+
+/**
+ * Generate screening answers for the supplied custom questions using the
+ * existing Ghostwriter LLM machinery. Returns a `{ question: answer }` map
+ * with one entry per question. Returns an empty map when there are no
+ * questions.
+ */
+export async function generateScreeningAnswersForJob(input: {
+  jobId: string;
+  profile: Record<string, unknown>;
+  questions: string[];
+}): Promise<Record<string, string>> {
+  if (input.questions.length === 0) {
+    return {};
+  }
+
+  const job = await jobsRepo.getJobById(input.jobId);
+  if (!job) {
+    throw notFound(`Job ${input.jobId} not found for screening answers`);
+  }
+
+  const llmConfig = await resolveLlmRuntimeSettings();
+  const prompt = buildScreeningAnswersPrompt(
+    input.questions,
+    job,
+    input.profile,
+  );
+
+  const llm = new LlmService({
+    provider: llmConfig.provider,
+    baseUrl: llmConfig.baseUrl,
+    apiKey: llmConfig.apiKey,
+  });
+
+  const llmResult = await llm.callJson<{ answers: Record<string, string> }>({
+    model: llmConfig.model,
+    messages: [
+      { role: "system", content: SCREENING_ANSWERS_SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ],
+    jsonSchema: SCREENING_ANSWERS_SCHEMA,
+    jobId: input.jobId,
+  });
+
+  if (!llmResult.success) {
+    logger.warn("Screening answer generation failed, returning empty map", {
+      jobId: input.jobId,
+      error: llmResult.error,
+    });
+    return {};
+  }
+
+  const answers = llmResult.data.answers ?? {};
+  const normalized: Record<string, string> = {};
+  for (const question of input.questions) {
+    const answer = answers[question];
+    normalized[question] = typeof answer === "string" ? answer : "";
+  }
+  return normalized;
+}
+
+const SCREENING_ANSWERS_SYSTEM_PROMPT = `You are an applicant filling out a job application screening form. You will be given a job description, the candidate's resume profile, and a list of screening questions. Return a JSON object with an "answers" property whose value is a map from each question to a concise, honest, role-specific answer based on the candidate's profile and the job description. Do not invent experience the profile does not support; if the profile does not address a question, say so briefly. Keep each answer to 1-3 sentences.`;
+
+function buildScreeningAnswersPrompt(
+  questions: string[],
+  job: { title?: string; employer?: string; jobDescription?: string | null },
+  profile: Record<string, unknown>,
+): string {
+  const questionsList = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
+  return [
+    `Job: ${job.title ?? "Unknown"} at ${job.employer ?? "Unknown"}`,
+    job.jobDescription
+      ? `Job description:\n${job.jobDescription}`
+      : "Job description: (not available)",
+    "",
+    "Candidate profile (JSON):",
+    JSON.stringify(profile, null, 2),
+    "",
+    "Screening questions:",
+    questionsList,
+    "",
+    'Return JSON of the form {"answers": { "<question>": "<answer>", ... }}.',
+  ].join("\n");
+}

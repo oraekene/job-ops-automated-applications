@@ -321,7 +321,7 @@
     {
       "id": "US-006",
       "title": "buildPayload: fetch profile and call Ghostwriter for screening answers",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-003"
       ],

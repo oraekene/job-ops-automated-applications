@@ -3,6 +3,7 @@ import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
 import { getJobByUrl } from "../repositories/jobs";
+import { generateScreeningAnswersForJob } from "./ghostwriter";
 import { pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { scoreJobSuitability } from "./scorer";
@@ -99,11 +100,16 @@ export const applicationService = {
       customQuestions: JSON.stringify(customQuestions),
     });
 
+    const screening_answers = await buildScreeningAnswers(
+      jobId,
+      customQuestions,
+    );
+
     return {
       applicationId: app.id,
       fields: {},
       cover_letter: "",
-      screening_answers: {},
+      screening_answers,
       resume_pdf_base64: "",
       resume_filename: "resume.pdf",
     };
@@ -177,6 +183,33 @@ async function loadProfileOrNull(): Promise<ResumeProfile | null> {
       { error },
     );
     return null;
+  }
+}
+
+async function buildScreeningAnswers(
+  jobId: string,
+  customQuestions: string[],
+): Promise<Record<string, string>> {
+  if (customQuestions.length === 0) {
+    return {};
+  }
+  try {
+    const profile = await getProfile();
+    const profileRecord =
+      profile && typeof profile === "object" && !Array.isArray(profile)
+        ? (profile as unknown as Record<string, unknown>)
+        : {};
+    return await generateScreeningAnswersForJob({
+      jobId,
+      profile: profileRecord,
+      questions: customQuestions,
+    });
+  } catch (error) {
+    logger.warn("buildPayload: screening answer generation failed", {
+      jobId,
+      error,
+    });
+    return Object.fromEntries(customQuestions.map((q) => [q, ""]));
   }
 }
 
