@@ -306,7 +306,7 @@
     {
       "id": "US-005",
       "title": "prepJob: include pdfFreshness",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-002"
       ],

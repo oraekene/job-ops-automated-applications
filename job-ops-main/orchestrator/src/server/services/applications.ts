@@ -3,6 +3,7 @@ import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
 import { getJobByUrl } from "../repositories/jobs";
+import { pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { scoreJobSuitability } from "./scorer";
 
@@ -64,6 +65,7 @@ export const applicationService = {
     const fullProfile = await loadProfileOrNull();
     const profile = fullProfile ? mapProfileToPrepProfile(fullProfile) : null;
     const suitabilityScore = await resolveSuitabilityScore(job, fullProfile);
+    const { hasTailoredPdf, pdfFreshness } = await resolvePdfFreshness(job);
 
     return {
       exists: true,
@@ -75,7 +77,8 @@ export const applicationService = {
         status: job.status,
       },
       profile,
-      hasTailoredPdf: false,
+      hasTailoredPdf,
+      pdfFreshness,
       applicationId: null,
     };
   },
@@ -199,6 +202,27 @@ async function resolveSuitabilityScore(
       error,
     });
     return 0;
+  }
+}
+
+async function resolvePdfFreshness(
+  job: Job,
+): Promise<{ hasTailoredPdf: boolean; pdfFreshness?: string }> {
+  if (!job.pdfGeneratedAt) {
+    return { hasTailoredPdf: false };
+  }
+  try {
+    const exists = await pdfExists(job.id);
+    if (!exists) {
+      return { hasTailoredPdf: false };
+    }
+    return { hasTailoredPdf: true, pdfFreshness: job.pdfGeneratedAt };
+  } catch (error) {
+    logger.warn("PDF existence check failed, treating as missing", {
+      jobId: job.id,
+      error,
+    });
+    return { hasTailoredPdf: false };
   }
 }
 
