@@ -420,7 +420,7 @@
     {
       "id": "US-012",
       "title": "Add GET /api/applications/queue/status endpoint",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-010"
       ],

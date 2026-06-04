@@ -107,3 +107,11 @@ applicationRouter.post(
     ok(res, result);
   }),
 );
+
+applicationRouter.get(
+  "/queue/status",
+  asyncRoute(async (_req: Request, res: Response) => {
+    const result = await applicationService.getQueueStatus();
+    ok(res, result);
+  }),
+);

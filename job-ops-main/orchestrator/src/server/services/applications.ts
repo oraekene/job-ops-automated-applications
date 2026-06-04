@@ -3,12 +3,15 @@ import { join } from "node:path";
 import { notFound, unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { db, schema } from "../db";
 import { applicationRepository } from "../repositories/applications";
 import {
   findAutoApplicableJobs,
   getJobById,
   getJobByUrl,
 } from "../repositories/jobs";
+import { getActiveTenantId } from "../tenancy/context";
 import {
   generateCoverLetterForJob,
   generateScreeningAnswersForJob,
@@ -262,6 +265,88 @@ export const applicationService = {
     const jobs = await findAutoApplicableJobs(clampedLimit);
     return { jobs };
   },
+
+  async getQueueStatus(): Promise<{
+    counts: {
+      pending: number;
+      submittedToday: number;
+      skippedToday: number;
+      failedToday: number;
+    };
+    lastRunAt: string | null;
+  }> {
+    const tenantId = getActiveTenantId();
+    const todayStart = startOfTodayUtcIso();
+
+    // 1. JobIds that have a terminal "completed" application row.
+    const completedJobIds = db
+      .select({ jobId: schema.applications.jobId })
+      .from(schema.applications)
+      .where(
+        and(
+          eq(schema.applications.tenantId, tenantId),
+          inArray(schema.applications.status, ["submitted", "skipped"]),
+        ),
+      )
+      .all()
+      .map((r) => r.jobId);
+
+    // 2. Pending = auto-applicable jobs not in the completed set.
+    const pendingWhere = and(
+      eq(schema.jobs.tenantId, tenantId),
+      eq(schema.jobs.autoApplicable, true),
+    );
+    const pendingResult =
+      completedJobIds.length > 0
+        ? db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(schema.jobs)
+            .where(
+              and(pendingWhere, notInArray(schema.jobs.id, completedJobIds)),
+            )
+            .get()
+        : db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(schema.jobs)
+            .where(pendingWhere)
+            .get();
+
+    // 3. Today counts grouped by status.
+    const todayRows = db
+      .select({
+        status: schema.applications.status,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(schema.applications)
+      .where(
+        and(
+          eq(schema.applications.tenantId, tenantId),
+          sql`${schema.applications.updatedAt} >= ${todayStart}`,
+        ),
+      )
+      .groupBy(schema.applications.status)
+      .all();
+    const todayMap = new Map(todayRows.map((r) => [r.status, r.count]));
+
+    // 4. Most recent application activity for the tenant.
+    const lastRunRow = db
+      .select({
+        max: sql<string | null>`MAX(${schema.applications.updatedAt})`,
+      })
+      .from(schema.applications)
+      .where(eq(schema.applications.tenantId, tenantId))
+      .get();
+
+    return {
+      counts: {
+        pending: pendingResult?.count ?? 0,
+        submittedToday: todayMap.get("submitted") ?? 0,
+        skippedToday: todayMap.get("skipped") ?? 0,
+        failedToday: todayMap.get("failed") ?? 0,
+      },
+      lastRunAt: lastRunRow?.max ?? null,
+    };
+  },
 };
 
 export const QUEUE_DEFAULT_LIMIT = 10;
@@ -472,6 +557,14 @@ function isOlderThanDays(iso: string, days: number): boolean {
   const ts = Date.parse(iso);
   if (Number.isNaN(ts)) return false;
   return Date.now() - ts > days * MS_PER_DAY;
+}
+
+/** ISO 8601 string for the start of today (UTC, e.g. 2026-06-04T00:00:00.000Z). */
+function startOfTodayUtcIso(): string {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  ).toISOString();
 }
 
 async function resolvePdfFreshness(
