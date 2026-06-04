@@ -16,8 +16,12 @@ import {
 import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { mapProfileToPrepProfile } from "./profileNormalize";
-import { scoreJobSuitability } from "./scorer";
+import { recomputeAndPersistSuitabilityScore } from "./scorer";
 import { getEffectiveSettings } from "./settings";
+
+/** Suitability scores older than this are considered stale. */
+const SUITABILITY_STALENESS_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface PrepProfile {
   first_name: string;
@@ -41,6 +45,7 @@ export interface PrepResult {
   hasTailoredPdf: boolean;
   pdfFreshness?: string;
   applicationId: string | null;
+  suitabilityStale: boolean;
 }
 
 export interface PayloadResult {
@@ -85,12 +90,14 @@ export const applicationService = {
         exists: false,
         hasTailoredPdf: false,
         applicationId: null,
+        suitabilityStale: false,
       };
     }
 
     const fullProfile = await loadProfileOrNull();
     const profile = fullProfile ? mapProfileToPrepProfile(fullProfile) : null;
-    const suitabilityScore = await resolveSuitabilityScore(job, fullProfile);
+    const { score: suitabilityScore, stale: suitabilityStale } =
+      await resolveSuitabilityScore(job, fullProfile);
     const { hasTailoredPdf, pdfFreshness } = await resolvePdfFreshness(job);
 
     return {
@@ -106,6 +113,7 @@ export const applicationService = {
       hasTailoredPdf,
       pdfFreshness,
       applicationId: null,
+      suitabilityStale,
     };
   },
 
@@ -416,26 +424,54 @@ async function buildCoverLetter(
 async function resolveSuitabilityScore(
   job: Job,
   profile: ResumeProfile | null,
-): Promise<number> {
-  if (job.suitabilityScore != null) {
-    return job.suitabilityScore;
+): Promise<{ score: number; stale: boolean }> {
+  // No stored score → compute once (no staleness possible, nothing to compare).
+  if (job.suitabilityScore == null) {
+    if (!profile) return { score: 0, stale: false };
+    try {
+      const { score } = await recomputeAndPersistSuitabilityScore(
+        job,
+        profile as unknown as Record<string, unknown>,
+      );
+      return { score, stale: false };
+    } catch (error) {
+      logger.warn("Suitability scoring failed, defaulting to 0", {
+        jobId: job.id,
+        error,
+      });
+      return { score: 0, stale: false };
+    }
   }
-  if (!profile) {
-    return 0;
+
+  // Stored score present. Decide whether it's stale.
+  const isStale =
+    job.suitabilityComputedAt != null &&
+    isOlderThanDays(job.suitabilityComputedAt, SUITABILITY_STALENESS_DAYS);
+
+  if (isStale && profile) {
+    try {
+      const { score } = await recomputeAndPersistSuitabilityScore(
+        job,
+        profile as unknown as Record<string, unknown>,
+      );
+      return { score, stale: true };
+    } catch (error) {
+      logger.warn("Suitability recompute failed, returning stored score", {
+        jobId: job.id,
+        error,
+      });
+      return { score: job.suitabilityScore, stale: true };
+    }
   }
-  try {
-    const { score } = await scoreJobSuitability(
-      job,
-      profile as unknown as Record<string, unknown>,
-    );
-    return score;
-  } catch (error) {
-    logger.warn("Suitability scoring failed, defaulting to 0", {
-      jobId: job.id,
-      error,
-    });
-    return 0;
-  }
+
+  // Stored score is fresh, or we have no profile to recompute against.
+  return { score: job.suitabilityScore, stale: false };
+}
+
+function isOlderThanDays(iso: string, days: number): boolean {
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return false;
+  return Date.now() - ts > days * MS_PER_DAY;
 }
 
 async function resolvePdfFreshness(

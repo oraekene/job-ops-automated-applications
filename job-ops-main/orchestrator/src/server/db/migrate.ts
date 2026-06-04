@@ -69,6 +69,10 @@ const jobsHasPdfRegenerating = tableHasColumn("jobs", "pdf_regenerating");
 const jobsHasJobBrief = tableHasColumn("jobs", "job_brief");
 const jobsHasAutoApplicable = tableHasColumn("jobs", "auto_applicable");
 const jobsHasLastApplicationId = tableHasColumn("jobs", "last_application_id");
+const jobsHasSuitabilityComputedAt = tableHasColumn(
+  "jobs",
+  "suitability_computed_at",
+);
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS tenants (
@@ -597,6 +601,9 @@ const migrations = [
   `ALTER TABLE jobs ADD COLUMN auto_applicable INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE jobs ADD COLUMN last_application_id TEXT`,
 
+  // Add suitability-computed timestamp for staleness detection (US-030)
+  `ALTER TABLE jobs ADD COLUMN suitability_computed_at TEXT`,
+
   // Add sponsor match columns for visa sponsor matching feature
   `ALTER TABLE jobs ADD COLUMN sponsor_match_score REAL`,
   `ALTER TABLE jobs ADD COLUMN sponsor_match_names TEXT`,
@@ -733,6 +740,7 @@ const migrations = [
     sponsor_match_names TEXT,
     auto_applicable INTEGER NOT NULL DEFAULT 0,
     last_application_id TEXT,
+    suitability_computed_at TEXT,
     discovered_at TEXT NOT NULL DEFAULT (datetime('now')),
     processed_at TEXT,
     ready_at TEXT,
@@ -749,7 +757,7 @@ const migrations = [
     vacancy_count, work_from_home_type, title, employer, employer_url, job_url, application_link, disciplines,
     deadline, salary, location, location_evidence, degree_required, starting, job_description, status, outcome, closed_at,
     suitability_score, suitability_reason, job_brief, tailored_summary, tailored_headline, tailored_skills,
-    selected_project_ids, pdf_path, pdf_source, pdf_regenerating, pdf_fingerprint, pdf_generated_at, tracer_links_enabled, sponsor_match_score, sponsor_match_names, auto_applicable, last_application_id, discovered_at, processed_at,
+    selected_project_ids, pdf_path, pdf_source, pdf_regenerating, pdf_fingerprint, pdf_generated_at, tracer_links_enabled, sponsor_match_score, sponsor_match_names, auto_applicable, last_application_id, suitability_computed_at, discovered_at, processed_at,
     ready_at,
     applied_at, created_at, updated_at
   )
@@ -761,7 +769,7 @@ const migrations = [
     vacancy_count, work_from_home_type, title, employer, employer_url, job_url, application_link, disciplines,
     deadline, salary, location, location_evidence, degree_required, starting, job_description, status, outcome, closed_at,
     suitability_score, suitability_reason, ${jobsHasJobBrief ? "job_brief" : "NULL"}, tailored_summary, tailored_headline, tailored_skills,
-    selected_project_ids, pdf_path, pdf_source, ${jobsHasPdfRegenerating ? "pdf_regenerating" : "0"}, pdf_fingerprint, pdf_generated_at, tracer_links_enabled, sponsor_match_score, sponsor_match_names, ${jobsHasAutoApplicable ? "COALESCE(auto_applicable, 0)" : "0"}, ${jobsHasLastApplicationId ? "last_application_id" : "NULL"}, discovered_at, processed_at,
+    selected_project_ids, pdf_path, pdf_source, ${jobsHasPdfRegenerating ? "pdf_regenerating" : "0"}, pdf_fingerprint, pdf_generated_at, tracer_links_enabled, sponsor_match_score, sponsor_match_names, ${jobsHasAutoApplicable ? "COALESCE(auto_applicable, 0)" : "0"}, ${jobsHasLastApplicationId ? "last_application_id" : "NULL"}, ${jobsHasSuitabilityComputedAt ? "suitability_computed_at" : "NULL"}, discovered_at, processed_at,
     ready_at,
     applied_at, created_at, updated_at
   FROM jobs`,

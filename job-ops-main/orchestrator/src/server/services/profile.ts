@@ -8,6 +8,7 @@ import {
 } from "./design-resume";
 import { getResume, RxResumeAuthConfigError } from "./rxresume";
 import { getConfiguredRxResumeBaseResumeId } from "./rxresume/baseResumeId";
+import { invalidateSuitabilityForActiveTenant } from "./scorer";
 
 type TenantProfileCache = {
   profile: ResumeProfile | null;
@@ -159,6 +160,23 @@ export function clearProfileCache(): void {
     return;
   }
   profileCacheByTenant.clear();
+}
+
+/**
+ * Notify the system that the profile for the active tenant has changed.
+ * Clears the in-memory cache and invalidates any cached suitability scores
+ * for that tenant's jobs so the next prepJob triggers a recompute.
+ *
+ * Returns the number of job rows whose `suitabilityComputedAt` was reset.
+ */
+export function onProfileChange(): number {
+  clearProfileCache();
+  const reset = invalidateSuitabilityForActiveTenant();
+  logger.info("Profile change hook: invalidated suitability scores", {
+    tenantId: getActiveTenantId(),
+    jobsReset: reset,
+  });
+  return reset;
 }
 
 export function __getProfileCacheSizeForTests(): number {

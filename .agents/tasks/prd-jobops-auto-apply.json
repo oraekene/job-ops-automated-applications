@@ -724,7 +724,7 @@
     {
       "id": "US-030",
       "title": "Hardening US-004: suitability score staleness detection and recompute",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-004"
       ],

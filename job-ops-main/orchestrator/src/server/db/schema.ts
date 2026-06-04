@@ -177,6 +177,7 @@ export const jobs = sqliteTable(
       .notNull()
       .default(false),
     lastApplicationId: text("last_application_id"),
+    suitabilityComputedAt: text("suitability_computed_at"),
 
     // Timestamps
     discoveredAt: text("discovered_at")

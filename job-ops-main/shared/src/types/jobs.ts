@@ -211,6 +211,7 @@ export interface Job {
   // Auto-application fields
   autoApplicable?: boolean;
   lastApplicationId?: string;
+  suitabilityComputedAt: string | null;
 
   // JobSpy fields (nullable for non-JobSpy sources)
   jobType: string | null;
