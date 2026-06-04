@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { notFound, unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
@@ -57,6 +58,20 @@ export interface ConfirmInput {
   atsType: string;
   confirmationId: string;
   submittedAt: string;
+  fieldSnapshot?: Record<string, string>;
+  answersSnapshot?: Record<string, string>;
+  screenshotBase64?: string;
+}
+
+export type QueueResultOutcome = "submitted" | "skipped" | "failed";
+
+export interface QueueResultInput {
+  jobId: string;
+  atsType: "greenhouse" | "lever";
+  outcome: QueueResultOutcome;
+  reason?: string;
+  confirmationId?: string;
+  submittedAt?: string;
   fieldSnapshot?: Record<string, string>;
   answersSnapshot?: Record<string, string>;
   screenshotBase64?: string;
@@ -159,6 +174,65 @@ export const applicationService = {
 
   getPending() {
     return applicationRepository.findPending();
+  },
+
+  async reportQueueResult(input: QueueResultInput) {
+    const job = await getJobById(input.jobId);
+    if (!job) throw notFound("Job not found");
+
+    const existing = applicationRepository.findByJobId(input.jobId);
+    const status = input.outcome;
+
+    const app =
+      existing ??
+      applicationRepository.create({
+        jobId: input.jobId,
+        atsType: input.atsType,
+        status,
+      });
+
+    const update: {
+      status: typeof status;
+      errorMessage: string | null;
+      confirmationId?: string | null;
+      submittedAt?: string;
+      fieldPayload?: string | null;
+      screeningAnswers?: string | null;
+      screenshotPath?: string | null;
+    } = {
+      status,
+      errorMessage:
+        input.outcome === "submitted" ? null : (input.reason ?? null),
+    };
+
+    if (input.outcome === "submitted") {
+      update.confirmationId = input.confirmationId ?? null;
+      update.submittedAt = input.submittedAt ?? new Date().toISOString();
+      if (input.fieldSnapshot) {
+        update.fieldPayload = JSON.stringify(input.fieldSnapshot);
+      }
+      if (input.answersSnapshot) {
+        update.screeningAnswers = JSON.stringify(input.answersSnapshot);
+      }
+    }
+
+    if (input.screenshotBase64) {
+      update.screenshotPath = await saveScreenshot(
+        app.id,
+        input.screenshotBase64,
+      );
+    }
+
+    applicationRepository.update(app.id, update);
+
+    logger.info("Queue result reported", {
+      jobId: input.jobId,
+      applicationId: app.id,
+      outcome: input.outcome,
+      reason: input.reason,
+    });
+
+    return { applicationId: app.id, newStatus: status };
   },
 
   async getAutoApplicableQueue(limit: number = QUEUE_DEFAULT_LIMIT): Promise<{
@@ -383,4 +457,21 @@ async function resolvePdfFreshness(
     });
     return { hasTailoredPdf: false };
   }
+}
+
+/**
+ * Decode a base64 screenshot from the extension and write it to
+ * <dataDir>/screenshots/<applicationId>.png. Returns the absolute path.
+ */
+async function saveScreenshot(
+  applicationId: string,
+  base64: string,
+): Promise<string> {
+  const dataDir = process.env.DATA_DIR ?? join(process.cwd(), "data");
+  const dir = join(dataDir, "screenshots");
+  await mkdir(dir, { recursive: true });
+  const filePath = join(dir, `${applicationId}.png`);
+  const buffer = Buffer.from(base64, "base64");
+  await writeFile(filePath, buffer);
+  return filePath;
 }

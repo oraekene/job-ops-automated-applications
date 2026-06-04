@@ -403,7 +403,7 @@
     {
       "id": "US-011",
       "title": "Add POST /api/applications/queue-result endpoint",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-010"
       ],

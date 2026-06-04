@@ -76,3 +76,34 @@ applicationRouter.get(
     ok(res, result);
   }),
 );
+
+applicationRouter.post(
+  "/queue-result",
+  asyncRoute(async (req: Request, res: Response) => {
+    const { jobId, atsType, outcome, reason, confirmationId, submittedAt } =
+      req.body ?? {};
+    if (!jobId || !atsType || !outcome) {
+      throw badRequest("Missing jobId, atsType, or outcome");
+    }
+    if (!["submitted", "skipped", "failed"].includes(outcome)) {
+      throw badRequest("outcome must be 'submitted' | 'skipped' | 'failed'");
+    }
+
+    const result = await applicationService.reportQueueResult({
+      jobId,
+      atsType,
+      outcome,
+      reason: typeof reason === "string" ? reason : undefined,
+      confirmationId:
+        typeof confirmationId === "string" ? confirmationId : undefined,
+      submittedAt: typeof submittedAt === "string" ? submittedAt : undefined,
+      fieldSnapshot: req.body?.fieldSnapshot,
+      answersSnapshot: req.body?.answersSnapshot,
+      screenshotBase64:
+        typeof req.body?.screenshotBase64 === "string"
+          ? req.body.screenshotBase64
+          : undefined,
+    });
+    ok(res, result);
+  }),
+);
