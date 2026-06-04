@@ -707,7 +707,7 @@
     {
       "id": "US-029",
       "title": "Hardening US-003: profile mapping normalization",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-003"
       ],

@@ -10,6 +10,7 @@ import {
 } from "./ghostwriter";
 import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
+import { mapProfileToPrepProfile } from "./profileNormalize";
 import { scoreJobSuitability } from "./scorer";
 import { getEffectiveSettings } from "./settings";
 
@@ -350,34 +351,4 @@ async function resolvePdfFreshness(
     });
     return { hasTailoredPdf: false };
   }
-}
-
-function mapProfileToPrepProfile(profile: ResumeProfile): PrepProfile | null {
-  const name = (profile.basics?.name ?? "").trim();
-  const email = (profile.basics?.email ?? "").trim();
-
-  if (!name || !email) {
-    return null;
-  }
-
-  const nameParts = name.split(/\s+/);
-  const first_name = nameParts[0] ?? "";
-  const last_name = nameParts.slice(1).join(" ");
-
-  return {
-    first_name,
-    last_name,
-    email,
-    phone: profile.basics?.phone ?? "",
-    linkedin_url: findLinkedInUrl(profile.basics?.profiles),
-    current_company: profile.sections?.experience?.items?.[0]?.company ?? "",
-  };
-}
-
-function findLinkedInUrl(
-  profiles: Array<{ network?: string; url?: string }> | undefined,
-): string {
-  if (!profiles) return "";
-  const linkedIn = profiles.find((p) => /linkedin/i.test(p.network ?? ""));
-  return linkedIn?.url ?? "";
 }
