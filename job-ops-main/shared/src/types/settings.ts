@@ -245,6 +245,7 @@ export interface AppSettings {
   penalizeMissingSalary: Resolved<boolean>;
   missingSalaryPenalty: Resolved<number>;
   autoSkipScoreThreshold: Resolved<number | null>;
+  autoApplicationEnabled: Resolved<boolean>;
   autoApplicationDefaultCoverLetter: Resolved<string>;
   autoApplicationSalaryRequirement: Resolved<string>;
 

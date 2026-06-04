@@ -24,6 +24,7 @@ import type {
 } from "@shared/types/location";
 import {
   and,
+  asc,
   desc,
   eq,
   inArray,
@@ -743,6 +744,46 @@ export async function getJobsForProcessing(limit: number = 10): Promise<Job[]> {
     .limit(limit);
 
   return rows.map(mapRowToJob);
+}
+
+/**
+ * Get jobs marked as auto-applicable for the active tenant, ordered
+ * by suitabilityScore DESC, createdAt ASC. Returns a slim shape
+ * suitable for the auto-apply queue endpoint.
+ */
+export async function findAutoApplicableJobs(limit: number): Promise<
+  Array<{
+    id: string;
+    url: string;
+    atsType: string;
+    title: string;
+    employer: string;
+    suitabilityScore: number;
+  }>
+> {
+  const tenantId = getActiveTenantId();
+  const rows = await db
+    .select({
+      id: jobs.id,
+      jobUrl: jobs.jobUrl,
+      source: jobs.source,
+      title: jobs.title,
+      employer: jobs.employer,
+      suitabilityScore: jobs.suitabilityScore,
+    })
+    .from(jobs)
+    .where(and(eq(jobs.tenantId, tenantId), eq(jobs.autoApplicable, true)))
+    .orderBy(desc(jobs.suitabilityScore), asc(jobs.createdAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    url: row.jobUrl,
+    atsType: row.source,
+    title: row.title,
+    employer: row.employer,
+    suitabilityScore: row.suitabilityScore ?? 0,
+  }));
 }
 
 export async function getReadyJobsWithGeneratedPdfs(

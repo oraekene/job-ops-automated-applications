@@ -3,7 +3,11 @@ import { notFound, unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
 import { applicationRepository } from "../repositories/applications";
-import { getJobById, getJobByUrl } from "../repositories/jobs";
+import {
+  findAutoApplicableJobs,
+  getJobById,
+  getJobByUrl,
+} from "../repositories/jobs";
 import {
   generateCoverLetterForJob,
   generateScreeningAnswersForJob,
@@ -156,7 +160,35 @@ export const applicationService = {
   getPending() {
     return applicationRepository.findPending();
   },
+
+  async getAutoApplicableQueue(limit: number = QUEUE_DEFAULT_LIMIT): Promise<{
+    jobs: Array<{
+      id: string;
+      url: string;
+      atsType: string;
+      title: string;
+      employer: string;
+      suitabilityScore: number;
+    }>;
+  }> {
+    const settings = await getEffectiveSettings();
+    if (!settings.autoApplicationEnabled.value) {
+      return { jobs: [] };
+    }
+
+    const clampedLimit = clampQueueLimit(limit);
+    const jobs = await findAutoApplicableJobs(clampedLimit);
+    return { jobs };
+  },
 };
+
+export const QUEUE_DEFAULT_LIMIT = 10;
+export const QUEUE_MAX_LIMIT = 50;
+
+export function clampQueueLimit(limit: number): number {
+  if (!Number.isFinite(limit) || limit <= 0) return QUEUE_DEFAULT_LIMIT;
+  return Math.min(QUEUE_MAX_LIMIT, Math.floor(limit));
+}
 
 /**
  * Normalize a job URL for comparison. Strips the URL fragment, query string,

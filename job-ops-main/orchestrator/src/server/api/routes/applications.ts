@@ -1,6 +1,9 @@
 import { badRequest } from "@infra/errors";
 import { asyncRoute, ok } from "@infra/http";
-import { applicationService } from "@server/services/applications";
+import {
+  applicationService,
+  QUEUE_DEFAULT_LIMIT,
+} from "@server/services/applications";
 import { type Request, type Response, Router } from "express";
 
 export const applicationRouter = Router();
@@ -57,5 +60,19 @@ applicationRouter.get(
   asyncRoute(async (_req: Request, res: Response) => {
     const pending = applicationService.getPending();
     ok(res, { applications: pending });
+  }),
+);
+
+applicationRouter.get(
+  "/queue",
+  asyncRoute(async (req: Request, res: Response) => {
+    const raw = req.query.limit;
+    const parsed =
+      typeof raw === "string" && raw.length > 0
+        ? Number.parseInt(raw, 10)
+        : NaN;
+    const limit = Number.isNaN(parsed) ? QUEUE_DEFAULT_LIMIT : parsed;
+    const result = await applicationService.getAutoApplicableQueue(limit);
+    ok(res, result);
   }),
 );

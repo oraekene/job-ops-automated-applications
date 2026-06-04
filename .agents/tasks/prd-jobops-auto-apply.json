@@ -386,7 +386,7 @@
     {
       "id": "US-010",
       "title": "Add GET /api/applications/queue endpoint",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-009"
       ],
