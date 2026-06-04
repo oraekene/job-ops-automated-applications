@@ -8,7 +8,7 @@ import {
 } from "./design-resume";
 import { getResume, RxResumeAuthConfigError } from "./rxresume";
 import { getConfiguredRxResumeBaseResumeId } from "./rxresume/baseResumeId";
-import { invalidateSuitabilityForActiveTenant } from "./scorer";
+import { invalidateSuitabilityForActiveTenant } from "./suitability";
 
 type TenantProfileCache = {
   profile: ResumeProfile | null;

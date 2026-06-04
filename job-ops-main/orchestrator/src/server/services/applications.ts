@@ -19,7 +19,7 @@ import {
 import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { mapProfileToPrepProfile } from "./profileNormalize";
-import { recomputeAndPersistSuitabilityScore } from "./scorer";
+import { recomputeAndPersistSuitabilityScore } from "./suitability";
 import { getEffectiveSettings } from "./settings";
 
 /** Suitability scores older than this are considered stale. */

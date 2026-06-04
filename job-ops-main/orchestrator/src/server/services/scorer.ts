@@ -5,9 +5,6 @@
 import { logger } from "@infra/logger";
 import { getDefaultPromptTemplate } from "@shared/prompt-template-definitions.js";
 import type { Job } from "@shared/types";
-import { sql } from "drizzle-orm";
-import { db, schema } from "../db";
-import { getActiveTenantId } from "../tenancy/context";
 import type { JsonSchemaDefinition } from "./llm/types";
 import { stripMarkdownCodeFences } from "./llm/utils/json";
 import { createConfiguredLlmService, resolveLlmModel } from "./modelSelection";
@@ -495,43 +492,6 @@ async function mockScore(
     score: penaltyResult.score,
     reason: penaltyResult.reason,
   };
-}
-
-/**
- * Recompute a job's suitability score and persist the result along with
- * the current timestamp in `suitabilityComputedAt`. Used by prepJob when
- * the stored score is older than the staleness threshold.
- */
-export async function recomputeAndPersistSuitabilityScore(
-  job: Job,
-  profile: Record<string, unknown>,
-): Promise<{ score: number; reason: string }> {
-  const result = await scoreJobSuitability(job, profile);
-  const now = new Date().toISOString();
-  db.update(schema.jobs)
-    .set({
-      suitabilityScore: result.score,
-      suitabilityReason: result.reason,
-      suitabilityComputedAt: now,
-    })
-    .where(sql`${schema.jobs.id} = ${job.id}`)
-    .run();
-  return result;
-}
-
-/**
- * Mark all jobs in the active tenant as having a stale suitability
- * score by clearing their `suitabilityComputedAt` timestamp. Called
- * from `onProfileChange` so the next prepJob triggers a recompute.
- */
-export function invalidateSuitabilityForActiveTenant(): number {
-  const tenantId = getActiveTenantId();
-  const result = db
-    .update(schema.jobs)
-    .set({ suitabilityComputedAt: null })
-    .where(sql`${schema.jobs.tenantId} = ${tenantId}`)
-    .run();
-  return result.changes ?? 0;
 }
 
 /**
