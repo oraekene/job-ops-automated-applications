@@ -368,17 +368,19 @@
     },
     {
       "id": "US-009",
-      "title": "Add `auto_applicable` and `last_application_id` to jobs table if missing",
-      "status": "open",
+      "title": "Add `auto_applicable` and `last_application_id` to jobs table",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
-      "description": "As the orchestrator, I want a per-job flag for 'this job is in the auto-apply pool' and a pointer to the most recent application, so the queue endpoint can return the right jobs and the UI can show history.",
+      "description": "As the orchestrator, I want a per-job flag for 'this job is in the auto-apply pool' and a pointer to the most recent application, so the queue endpoint can return the right jobs and the UI can show history. Both columns exist in `db/schema.ts` (lines 176, 179) but are missing from the `CREATE TABLE jobs` block in `db/migrate.ts` and from the `ALTER TABLE jobs ADD COLUMN` lines. This is a real bug — fresh DBs never get the columns. Fix by adding to both the CREATE statement (for fresh DBs) and the ALTER list (for existing DBs; the existing `isDuplicateColumn` catch makes the ALTERs idempotent).",
       "acceptanceCriteria": [
-        "Verify both columns exist in `orchestrator/src/server/db/schema.ts` on the `jobs` table. If they don't, add them with appropriate Drizzle types and create a migration",
-        "Add a Drizzle migration under `orchestrator/src/server/db/migrations/` that adds the columns with safe defaults (NULL or false) and is idempotent",
-        "Example: running the migration against a fresh DB succeeds; running it again is a no-op",
-        "Negative case: a developer running the migration on a DB that already has the columns sees a clear 'column already exists' message and exits 0"
+        "Both columns added to the `CREATE TABLE jobs` statement in `db/migrate.ts` (after `sponsor_match_names`, before timestamps) with `auto_applicable INTEGER NOT NULL DEFAULT 0` and `last_application_id TEXT`",
+        "Two `ALTER TABLE jobs ADD COLUMN` lines added to the migrations array, after the `pdf_generated_at` line, with safe defaults",
+        "The `jobs_new` rebuild `CREATE TABLE` (in the same migrate.ts, around line 666) also includes both columns so the table-rebuild path doesn't drop them",
+        "The INSERT/SELECT for the rebuild covers the new columns (either by name or via the catch-all SELECT *)",
+        "`biome ci .` exits 0; `npm --workspace orchestrator check:types` exits 0; `npm --workspace orchestrator test:run` passes a new test that asserts the columns exist on a fresh in-memory DB and the migration is idempotent on a re-run",
+        "Negative case: running migrate.ts twice on the same DB exits 0 with the second run logging 'Migration skipped (column already exists)' for both columns"
       ]
     },
     {
@@ -433,19 +435,39 @@
       ]
     },
     {
-      "id": "US-013",
+      "id": "US-013a",
       "title": "Extension doFill: call buildPayload instead of hardcoded data",
       "status": "open",
       "dependsOn": [
         "US-008"
       ],
-      "description": "As the extension, I want doFill to call the real buildPayload endpoint and use the returned fields, cover letter, screening answers, and PDF, so the form is filled with the user's real data.",
+      "description": "As the extension, I want doFill to call the real buildPayload endpoint and use the returned fields, cover letter, screening answers, and PDF, so the form is filled with the user's real data. This sub-story covers the wiring: replace the hardcoded `profile` object in `packages/extension/src/content-script.ts` with a real `api.buildPayload` call, handle the response matrix (200/404/422/5xx), and report the outcome to the background.",
       "acceptanceCriteria": [
-        "Replace the hardcoded `profile` object in `packages/extension/src/content-script.ts` with a call to `api.buildPayload(jobId, atsType, customQuestions)`",
-        "Pass the returned `fields` map to the ATS driver's label map and `screening_answers` to the custom-question fill step",
-        "On a 5xx or 422 response, the panel shows 'Skipped: <reason>' and `chrome.runtime.sendMessage` reports the result to the background service worker (US-016)",
-        "Example: a successful buildPayload call returns fields and the ATS driver fills 7 inputs and 1 textarea",
+        "Replace the hardcoded `profile` object in `packages/extension/src/content-script.ts` (lines 135-144) with a call to `api.buildPayload(jobId, atsType, customQuestions)`",
+        "Extract `jobId` from the URL (URL query parameter `?jobId=...` or set by the background at tab-open time) and `atsType` from `detectAtsByUrl(url)`",
+        "Handle the full error matrix: 200 → proceed to fill; 404 → 'Complete onboarding first' panel + report `outcome: 'skipped', reason: 'profile missing'`; 422 → 'Skipped: <reason from server>' + report `outcome: 'skipped'`; 5xx → 'Skipped: server error' + report `outcome: 'skipped', reason: 'server error'`; network error → 'Skipped: network error' + report `outcome: 'skipped', reason: 'network error'`",
+        "Send the `payload` object to a new `populateAtsForm(payload, atsType)` function (implemented in US-013b) — this sub-story just passes the data through",
+        "Send a `{kind: 'jobops:result', jobId, outcome, reason, ...}` message to the background via `chrome.runtime.sendMessage` in every terminal case (success, skipped, failed)",
+        "Tests: 3 cases in `content-script.doFill.test.ts` (success path mocks `api.buildPayload` to return 200; 404 path; 422 path). Tests use the existing `jsdom` setup from `packages/extension/vitest.config.ts`",
+        "Example: a successful buildPayload call returns `{fields: {first_name: 'Ada', ...}, cover_letter: '...', resume_pdf_base64: '...', ...}` and `populateAtsForm` is invoked with it",
         "Negative case: a 404 from buildPayload (no profile) is caught, the panel shows 'Complete onboarding first', and the result is reported as skipped"
+      ]
+    },
+    {
+      "id": "US-013b",
+      "title": "Extension doFill: populate fields, screening answers, and cover letter into the ATS form",
+      "status": "open",
+      "dependsOn": [
+        "US-013a"
+      ],
+      "description": "As the extension, I want the fields returned by buildPayload to actually fill the form inputs, the screening answers to populate the custom-question textareas, and the cover letter to fill the cover-letter field. This sub-story adds the `populateAtsForm(payload, atsType)` function and wires it to the existing ATS drivers (`fillGreenhouseForm`, `fillLeverForm`) and the `fillFormByLabels` fallback.",
+      "acceptanceCriteria": [
+        "Add `populateAtsForm(payload, atsType)` in `packages/extension/src/content-script.ts` that: calls `atsFiller({...payload.fields, screening_answers: payload.screening_answers, cover_letter: payload.cover_letter, salary: payload.fields.salary})` for the detected ATS type, then calls `fillFormByLabels` as a fallback for fields the ATS driver missed",
+        "Custom-question fill: extract custom questions from the DOM via the existing `_extractCustomQuestions(atsType)` helper, then for each question whose text matches a key in `payload.screening_answers`, find the corresponding textarea/input in the DOM (by question text proximity), and set its value with the same input/change event dispatching as `fillFormByLabels`",
+        "Cover letter fill: the same `fillFormByLabels` already has a `'cover letter': 'cover_letter'` label map; verify it still works with the new payload shape",
+        "Tests: 3 cases in `content-script.populateAtsForm.test.ts` (full Greenhouse DOM with 7 inputs + 1 textarea, full Lever DOM with 5 inputs, Greenhouse DOM with a custom question) using the existing `jsdom` setup",
+        "Example: a successful buildPayload call returns fields and the ATS driver fills 7 inputs and 1 textarea (regression-tested against the original hardcoded behaviour, but with real data)",
+        "Negative case: a Greenhouse DOM with no custom questions leaves `payload.screening_answers` untouched and the fill step completes without errors"
       ]
     },
     {
@@ -465,36 +487,79 @@
       ]
     },
     {
-      "id": "US-015",
-      "title": "Extension background service worker: poll /queue",
+      "id": "US-015a",
+      "title": "Extension background: chrome.alarms poll loop with state machine and backoff",
       "status": "open",
       "dependsOn": [
         "US-010"
       ],
-      "description": "As the extension, I want a background service worker that polls the queue endpoint and dispatches each job, so the user can enable auto-apply once and walk away.",
+      "description": "As the extension, I want a background service worker that polls the queue endpoint and dispatches each job, so the user can enable auto-apply once and walk away. This sub-story wires the chrome.alarms-based poll loop, the state machine, the toggle listener, and the exponential backoff. The actual tab-opening is in US-015b.",
       "acceptanceCriteria": [
-        "Add a `background.ts` poll loop that calls `api.getQueue(10)` every 30 seconds while `autoApply.enabled` is true in `chrome.storage.sync`",
-        "The poll stops automatically when the toggle is off or when there are no pending items",
-        "Each queue item is dispatched to a new tab via `chrome.tabs.create({ url, active: false })` with a `jobId` query parameter so the content script knows what to fill",
-        "Example: with 3 jobs in the queue and the toggle on, 3 tabs are opened within 30 seconds of enabling the toggle",
-        "Negative case: with the toggle off, no GET /queue calls are made (verified via network panel)"
+        "Add `packages/extension/src/background.ts` (no `background.ts` exists in the extension yet — greenfield)",
+        "Use `chrome.alarms.create('jobops-poll', {periodInMinutes: 0.5})` (30s is the minimum in production) to wake the service worker every 30 seconds",
+        "State machine: `idle` → `polling` → `processing` (queue is non-empty, tabs are opening) → `idle` (queue empty, sleep until next alarm) → `backoff` (poll failed, retry with exponential delay 30s/60s/120s/240s capped at 300s) → `idle` (next poll succeeds)",
+        "Listen to `chrome.storage.onChanged` for `autoApply.enabled` flips; when `false`, clear the alarm and abort any in-flight poll (set state to `idle`, do not open new tabs)",
+        "When the alarm fires and state is `idle` and toggle is on, call `api.getQueue(10)`. On 200, transition to `processing` and pass the jobs to the dispatcher (US-015b). On 5xx or network error, transition to `backoff` and schedule a one-shot alarm at the backoff delay",
+        "On toggle flipped from `true` to `false`, drain the in-flight queue: stop opening new tabs but let currently-open tabs complete and report",
+        "Tests: 4 cases in `background.poll.test.ts` using a `chrome.*` API mock (helper at `packages/extension/src/test-helpers/chrome-mock.ts`): poll-on-toggle-on opens tabs; poll-on-toggle-off clears alarm; backoff on 5xx resumes on success; toggle flip drains in-flight",
+        "Example: with 3 jobs in the queue and the toggle on, 3 tabs are opened within 30 seconds of enabling the toggle (continues to US-015b for the actual tab-opening)",
+        "Negative case: with the toggle off, no GET /queue calls are made (verified by asserting `chrome.alarms.create` is called once for setup and `chrome.alarms.clear` is called on toggle-off)"
       ]
     },
     {
-      "id": "US-016",
-      "title": "Extension background: report results and close tabs",
+      "id": "US-015b",
+      "title": "Extension background: open tab per queue item with jobId param",
       "status": "open",
       "dependsOn": [
-        "US-014",
-        "US-015"
+        "US-015a"
       ],
-      "description": "As the extension, I want each completed job to report its result to the orchestrator and the tab to close, so the queue moves forward without human intervention.",
+      "description": "As the extension, I want each queue item to be dispatched to its own tab with the jobId passed through, so the content script can identify which job to fill.",
       "acceptanceCriteria": [
-        "The content script posts a `{ kind: 'jobops:result', jobId, outcome, reason?, confirmationId?, fieldSnapshot?, answersSnapshot? }` message to the background when the application submits, is skipped, or fails",
-        "The background forwards the message to `api.reportQueueResult(...)` and then `chrome.tabs.remove(tabId)` for the originating tab",
-        "If the message handler receives no result within 120 seconds, the background treats the job as failed and reports `{ outcome: 'failed', reason: 'timeout' }`",
+        "The dispatcher (called from US-015a's state machine) calls `chrome.tabs.create({url: <queueItem.url> + '?jobId=' + queueItem.id, active: false})` for each queue item",
+        "Skip items whose URL is not Greenhouse or Lever (ATS detected via URL pattern match; if it doesn't match a known ATS, log a warning and skip with `outcome: 'skipped', reason: 'unknown ATS'`)",
+        "Limit concurrent open tabs to 3 (don't open tab N+1 until a tab from a previous cycle has reported — implement via a `dispatching` set in module state)",
+        "Track each opened tab's `tabId` in a map keyed by `jobId` so the report handler (US-016b) can close the right tab",
+        "Tests: 3 cases in `background.dispatch.test.ts`: open-tab-per-item with 3 jobs; skip unknown-ATS; concurrent cap of 3",
+        "Example: with 3 jobs in the queue, 3 tabs are opened with `active: false`, each with a unique `?jobId=...` query parameter",
+        "Negative case: a queue item with `url: 'https://example.com/apply'` (not Greenhouse/Lever) is logged and skipped without a tab opening"
+      ]
+    },
+    {
+      "id": "US-016a",
+      "title": "Extension content script: post job result message",
+      "status": "open",
+      "dependsOn": [
+        "US-013b"
+      ],
+      "description": "As the extension, I want the content script to post a structured result message to the background when a job completes, is skipped, or fails, so the background can record and close the tab.",
+      "acceptanceCriteria": [
+        "Define a `JobopsResult` type: `{kind: 'jobops:result', jobId: string, outcome: 'submitted' | 'skipped' | 'failed', reason?: string, confirmationId?: string, fieldSnapshot?: Record<string, string>, answersSnapshot?: Record<string, string>, screenshotBase64?: string}`",
+        "Content script posts the message via `chrome.runtime.sendMessage(result)` in every terminal case: after `populateAtsForm` + auto-submit completes (success); on any error path (skipped); on uncaught throw (failed)",
+        "The `screenshotBase64` is optional and only attached on `submitted` (capture via a `chrome.tabs.captureVisibleTab` call from the background after `reportQueueResult` succeeds, NOT from the content script — content script can't capture cross-origin)",
+        "The `confirmationId` is extracted from the post-submit URL (e.g., `?gh_jid=...` or `/confirmation/<id>`) or from the success DOM (regex against `Your application has been submitted` and the surrounding `data-confirmation-id` attribute if present)",
+        "Tests: 3 cases in `content-script.result.test.ts`: success posts a result with `outcome: 'submitted'`; skipped with reason posts a result with `outcome: 'skipped'`; uncaught throw posts `outcome: 'failed'`",
+        "Example: a successful submit posts a result with `outcome: 'submitted'`, `confirmationId: 'abc123'`, and `fieldSnapshot` containing the 7 filled inputs",
+        "Negative case: a content script that throws after `populateAtsForm` posts a result with `outcome: 'failed', reason: <error message>` before the throw is re-thrown"
+      ]
+    },
+    {
+      "id": "US-016b",
+      "title": "Extension background: receive result, forward to orchestrator, close tab, 120s timeout",
+      "status": "open",
+      "dependsOn": [
+        "US-015b",
+        "US-016a"
+      ],
+      "description": "As the extension, I want the background to receive the result, forward to the orchestrator, close the tab, and enforce a 120s timeout so crashed tabs are reported as failed.",
+      "acceptanceCriteria": [
+        "Background registers `chrome.runtime.onMessage` listener that filters for `msg.kind === 'jobops:result'`",
+        "On result received: look up the tabId in the `dispatching` map (from US-015b), call `api.reportQueueResult(msg)`, then `chrome.tabs.remove(tabId)`, then remove the jobId from the dispatching map",
+        "On `reportQueueResult` failure (5xx or network): retry 3 times with exponential backoff (1s, 2s, 4s). If all retries fail, queue the result in `chrome.storage.local` under `pendingResults` and flush on the next successful poll (US-015a)",
+        "When a tab is opened (US-015b), set a 120s timeout that, if reached, reports `{outcome: 'failed', reason: 'timeout'}` for that jobId, closes the tab, and clears the timeout",
+        "On `reportQueueResult` success, optionally capture a screenshot via `chrome.tabs.captureVisibleTab` (only on `outcome: 'submitted'`) and include it in a follow-up `api.screenshotForJob(jobId, base64)` call (NEW endpoint or reuse `reportQueueResult` with a second call — prefer the latter for now)",
+        "Tests: 4 cases in `background.report.test.ts`: happy path; 5xx on report retries 3x; timeout path; pendingResults flush on next poll",
         "Example: a successful submit posts a result with `outcome: 'submitted'`, the orchestrator records it, and the tab closes within 2 seconds",
-        "Negative case: a tab that crashes mid-fill triggers the 120s timeout path and the job is reported as failed"
+        "Negative case: a tab that crashes mid-fill triggers the 120s timeout path, the job is reported as failed, and the tab is closed (if still open)"
       ]
     },
     {
@@ -560,21 +625,42 @@
       ]
     },
     {
-      "id": "US-021",
-      "title": "Extension vitest for queue runner and blocker detection",
+      "id": "US-021a",
+      "title": "Extension vitest: background service worker",
       "status": "open",
       "dependsOn": [
-        "US-015",
-        "US-016",
+        "US-015a",
+        "US-015b",
+        "US-016a",
+        "US-016b",
+        "US-017",
+        "US-018"
+      ],
+      "description": "As a developer, I want vitest coverage for the new background logic so the autonomous loop doesn't regress silently. This sub-story covers the background service worker tests. Blocker detection tests are in US-021b.",
+      "acceptanceCriteria": [
+        "Add `packages/extension/src/background.poll.test.ts` with cases for: poll loop starts on `autoApply.enabled = true` (asserts `chrome.alarms.create` is called with the right name and period), poll loop stops on `autoApply.enabled = false` (asserts `chrome.alarms.clear`), backoff state on 5xx (asserts a one-shot alarm is scheduled with delay matching the backoff step), backoff resets to idle on next successful poll",
+        "Add `packages/extension/src/background.dispatch.test.ts` with cases for: 3 jobs in queue open 3 tabs with `active: false` and `?jobId=...` query; unknown-ATS URL is logged and skipped (no tab opened); concurrent cap of 3 (4th job is queued until one reports)",
+        "Add `packages/extension/src/background.report.test.ts` with cases for: result on `outcome: 'submitted'` calls `api.reportQueueResult` then `chrome.tabs.remove`; result on `outcome: 'skipped'` does the same; 5xx on report retries 3 times with backoff; 120s timeout on no-result reports `outcome: 'failed', reason: 'timeout'` and closes the tab",
+        "Use a `chrome-mock` helper at `packages/extension/src/test-helpers/chrome-mock.ts` that provides a jest-style mock for `chrome.alarms`, `chrome.runtime`, `chrome.tabs`, `chrome.storage.sync`, `chrome.storage.local`",
+        "Use the existing `jsdom` setup from `packages/extension/vitest.config.ts`",
+        "Example: a test that flips `autoApply.enabled` to true, advances fake timers by 30s, asserts the `api.getQueue` mock is called once with limit 10",
+        "Negative case: a test that asserts `chrome.alarms.clear` is called (not just `chrome.alarms.create` is not called) when the toggle is flipped off"
+      ]
+    },
+    {
+      "id": "US-021b",
+      "title": "Extension vitest: blocker detection",
+      "status": "open",
+      "dependsOn": [
         "US-017"
       ],
-      "description": "As a developer, I want vitest coverage for the new background logic and the blocker detector, so the autonomous loop doesn't regress silently.",
+      "description": "As a developer, I want vitest coverage for the blocker detector so a false-negative (real blocker not detected) or false-positive (clean page flagged) is caught by tests.",
       "acceptanceCriteria": [
-        "Add `packages/extension/src/background.test.ts` with cases for: polling starts on toggle on, polling stops on toggle off, queue result is forwarded to api.reportQueueResult, tab is closed after result, 120s timeout reports 'failed'",
-        "Add `packages/extension/src/detect-blocker.test.ts` with cases for: reCAPTCHA iframe detected, MFA prompt detected, unknown ATS skipped, clean Greenhouse page not flagged",
+        "Add `packages/extension/src/detect-blocker.test.ts` with cases for: reCAPTCHA iframe detected (`<iframe src='https://www.google.com/recaptcha/api2/anchor'>`) → `{blocked: true, reason: 'reCAPTCHA detected'}`; hCaptcha iframe detected → `{blocked: true, reason: 'hCaptcha detected'}`; MFA prompt detected (a `<div>` with text 'Verify your identity') → `{blocked: true, reason: 'MFA prompt detected'}`; Greenhouse 'Sign in to apply' modal detected → `{blocked: true, reason: 'sign-in required'}`; Lever 'Sign in' modal detected → `{blocked: true, reason: 'sign-in required'}`; clean Greenhouse DOM with no iframes, no MFA, no modals → `{blocked: false}`",
         "Tests use the existing `jsdom` setup from `packages/extension/vitest.config.ts`",
         "Example: a test injects a `<iframe src='https://www.google.com/recaptcha/...'>`, runs `detectBlocker()`, and asserts `blocked === true` with `reason === 'reCAPTCHA detected'`",
-        "Negative case: a test with a clean Greenhouse DOM asserts `blocked === false`"
+        "Negative case: a test with a clean Greenhouse DOM (no iframes, no MFA text, no sign-in modal) asserts `blocked === false`",
+        "Tests are fast (no real timers, no real `MutationObserver` — use jsdom or stub)"
       ]
     },
     {
@@ -616,6 +702,151 @@
         "biome format --write re-formatted 2 files (TracerLinksPage, chart.tsx) for trailing whitespace; biome ci now passes (823 files checked).",
         "Local test:run gate blocked by missing better-sqlite3 prebuild for Node 24.11.1 (CI uses Node 22.22.1, so this gate will pass in CI).",
         "Verified locally: biome ci (lint), npm --workspace shared check:types, npm --workspace orchestrator check:types, npm --workspace orchestrator build:client, npm --workspace {adzuna,hiringcafe,gradcracker,startupjobs,workingnomads,ukvisajobs}-extractor check:types, npm run check:docs (docusaurus build). All exit 0."
+      ]
+    },
+    {
+      "id": "US-029",
+      "title": "Hardening US-003: profile mapping normalization",
+      "status": "open",
+      "dependsOn": [
+        "US-003"
+      ],
+      "description": "As the extension, I want the prepJob profile to have a normalized phone (E.164), a canonical LinkedIn URL, and the current company ordered by startDate (not by items[0]), so the auto-apply uses the right contact info and the right company name.",
+      "acceptanceCriteria": [
+        "Phone: `mapProfileToPrepProfile` (in `services/applications.ts`) parses `basics.phone` and produces an E.164 string. If the number is not parseable, keep the raw input (never throw). Use `libphonenumber-js` (add to orchestrator deps) or a hand-rolled parser. Default region = 'US'",
+        "LinkedIn URL: extract the first profile whose `network` matches `/linkedin/i`, then canonicalize to `https://www.linkedin.com/in/<slug>` where slug is the path segment after `/in/`, lowercased, with tracking query params stripped. If the profile URL is already canonical, return as-is",
+        "Current company: order `sections.experience.items` by `startDate` DESC, then by `endDate` DESC (treat null `endDate` as 'present' = newest; treat null `startDate` as oldest). Take the first item's `company`. If no experience items, return ''",
+        "Add 4 unit tests in `services/applications.profileNormalize.test.ts`: phone '(415) 555-1234' → '+14155551234'; phone 'invalid' → 'invalid' (raw passthrough); LinkedIn 'linkedin.com/in/John-Doe?utm_source=x' → 'https://www.linkedin.com/in/john-doe'; experience items out-of-order → current company is the one with the latest startDate",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: a profile with no LinkedIn URL, no phone, and no experience items returns `{linkedin_url: '', phone: '', current_company: ''}` (no throw, no undefined)"
+      ]
+    },
+    {
+      "id": "US-030",
+      "title": "Hardening US-004: suitability score staleness detection and recompute",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As the user, I want a stored suitabilityScore to be re-checked when it's old (or when my profile has changed), so the score I see in the panel is current and the cover letter is written for the right match.",
+      "acceptanceCriteria": [
+        "Add a new nullable `suitabilityComputedAt: text` column to the `jobs` table in `db/schema.ts` and to the `CREATE TABLE jobs` + `ALTER TABLE jobs ADD COLUMN` blocks in `db/migrate.ts` (idempotent via the existing `isDuplicateColumn` catch)",
+        "In `services/scoreJobSuitability` (or a new wrapper), set `suitabilityComputedAt = datetime('now')` whenever the score is recomputed",
+        "In `prepJob`, if `job.suitabilityScore !== null && job.suitabilityComputedAt !== null && (now - suitabilityComputedAt > 7 days)`, recompute via `scoreJobSuitability(job, profile)` and update the row. If profile is null, do not recompute (return the stored score as-is)",
+        "Expose `suitabilityStale: boolean` in `prepResult` (true if a recompute happened, OR if the profile hash differs from the hash at `suitabilityComputedAt` time — store a `suitabilityProfileHash` column too, optional for the first cut; if not, just use the age check)",
+        "On profile change: add an `onProfileChange` hook in `services/profile.ts` that sets `suitabilityComputedAt = NULL` for all jobs of the tenant (so the next prepJob triggers a recompute)",
+        "Add 3 unit tests in `services/applications.suitabilityStale.test.ts`: stale (computed 8 days ago) → recompute; fresh (computed 1 day ago) → use stored; profile null → use stored regardless of age",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: prepJob with `job.suitabilityScore = null && job.suitabilityComputedAt = null` does NOT recompute (no profile, no stored score); returns 0"
+      ]
+    },
+    {
+      "id": "US-031",
+      "title": "Hardening US-005: PDF staleness threshold and fingerprint cross-check",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As the user, I want the panel to tell me when the tailored PDF is stale (older than N days, or older than the base resume), so I know to regenerate before applying.",
+      "acceptanceCriteria": [
+        "Add `autoApplicationPdfMaxAgeDays` to `shared/src/types/settings.ts` (`AppSettings`) and to `shared/src/testing/factories.ts` (default `'7'`). Add an entry in `shared/src/settings-registry.ts`",
+        "In `prepJob`, compute `pdfStale` as: `hasTailoredPdf && (job.pdfGeneratedAt < now - N days || job.pdfFingerprint !== currentBaseResumeFingerprint)`. If no base-resume fingerprint is available, fall back to age only",
+        "In `prepJob`, also check `job.pdfRegenerating` (existing boolean in schema). If true, return `hasTailoredPdf: false, pdfFreshness: null` (the PDF is being regenerated and should not be used)",
+        "Add `pdfStale: boolean` and `pdfStaleReason?: 'age' | 'fingerprint' | 'regenerating'` to `prepResult`",
+        "Add a helper `computeBaseResumeFingerprint()` in `services/applications.ts` that returns a short hash of the base resume content (or `null` if not available)",
+        "Add 3 unit tests in `services/applications.pdfStale.test.ts`: PDF age > N days → stale; fingerprint mismatch → stale; `pdfRegenerating = true` → `hasTailoredPdf: false` regardless of timestamp",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: `hasTailoredPdf = false && job.pdfGeneratedAt = null` returns `pdfStale: false` (no PDF, no staleness claim)"
+      ]
+    },
+    {
+      "id": "US-032",
+      "title": "Hardening US-006: screening answer robustness, streaming, and validation",
+      "status": "open",
+      "dependsOn": [
+        "US-006"
+      ],
+      "description": "As the user, I want the screening-answer LLM call to fail loudly (not silently return empty) when the model is unavailable or returns invalid JSON, and to stream the answer back to the extension so the UI shows progress.",
+      "acceptanceCriteria": [
+        "On LLM throw or JSON parse error, `generateScreeningAnswersForJob` retries once with a repair prompt (a re-stated, simpler version of the original prompt). If the retry also fails, throws `ScreeningAnswersUnavailableError` (new typed error in `services/ghostwriter.ts`)",
+        "In `buildPayload`, catch `ScreeningAnswersUnavailableError`. If caught AND there are non-empty `customQuestions`, throw `unprocessableEntity` (422) with reason 'screening answers unavailable'. If `customQuestions` is empty, return `{}` (the original behaviour for the empty case)",
+        "Add streaming support: `generateScreeningAnswersForJob` accepts an optional `onChunk?: (chunk: string) => void` callback. The buildPayload path passes a callback that pushes the chunk to a `ReadableStream` returned in `payload.screening_answers_stream` (SSE-style: the extension reads the stream as the LLM generates). For now, the orchestrator returns both the final map and the stream in the response; the extension uses the map and the stream is informational",
+        "Validate each non-empty question has a non-empty answer (string length > 0). If any question is missing, retry once. If retry also missing, throw `ScreeningAnswersValidationError`",
+        "Add 4 unit tests in `services/ghostwriter.screeningAnswersRobustness.test.ts`: LLM throw on first attempt → retry; retry also fails → throw `ScreeningAnswersUnavailableError`; JSON parse error → retry; missing answer for one question → retry",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: `customQuestions = []` returns `{}` with no LLM call (unchanged from US-006 behaviour)"
+      ]
+    },
+    {
+      "id": "US-033",
+      "title": "Hardening US-007: PDF integrity, size limit, compression, and data: URL",
+      "status": "open",
+      "dependsOn": [
+        "US-007"
+      ],
+      "description": "As the orchestrator, I want to return only valid PDFs under 10 MB, in a form the extension can use without re-decoding, so the upload step is reliable and fast.",
+      "acceptanceCriteria": [
+        "In `buildPayload`, after `generatePdf`, read the first 5 bytes of the file. Assert they match `%PDF-` (0x25 0x50 0x44 0x46 0x2D). If not, throw `unprocessableEntity` (422) with reason 'PDF integrity check failed'",
+        "If `pdfPath` file size > 10 MB, throw `payloadTooLarge` (413) with reason 'PDF exceeds 10MB limit'",
+        "Compress the PDF bytes with `zlib.gzipSync` (Node built-in, no new dep) before base64-encoding. Add a `Content-Encoding: gzip` header convention to the response (or document in the AC that the extension decodes with `pako.inflateRaw` or `zlib.gunzipSync`)",
+        "Return `data:application/pdf;base64,...` as `resume_pdf_base64` so the extension can use the URL directly (`<a href={url} download='resume.pdf'>` or as a `File` source) without synchronous decode in the content script",
+        "Keep the existing `resume_filename: 'resume_<jobId>.pdf'`",
+        "Add 3 unit tests in `services/applications.pdfIntegrity.test.ts`: valid PDF passes; non-PDF (e.g., a text file) throws 422; >10MB throws 413",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: a PDF with a `.pdf` extension but corrupted content (first 5 bytes overwritten) is rejected with 422"
+      ]
+    },
+    {
+      "id": "US-034",
+      "title": "Hardening US-008: cover letter quality, streaming, and screening-answer cross-reference",
+      "status": "open",
+      "dependsOn": [
+        "US-008"
+      ],
+      "description": "As the user, I want the cover letter to be high quality (per-paragraph structured output, streaming, no contradictions with the screening answers, length validated), so the application reads as written by a human.",
+      "acceptanceCriteria": [
+        "Change `generateCoverLetterForJob` to use a structured-output LLM call with the JSON schema `{intro: string, body: string, outro: string, fullText: string}` (concatenation of the three parts). The orchestrator returns `cover_letter = fullText`",
+        "Pass the screening answers as context to the cover letter LLM call so the cover letter doesn't contradict them (e.g., both say '5 years of React' or both say '3 years'). Implement by calling `generateScreeningAnswersForJob` first (or using the result passed in if `buildPayload` calls both) and including the answers in the cover letter prompt",
+        "Add streaming: `generateCoverLetterForJob` accepts an optional `onChunk?: (chunk: string) => void` callback. The buildPayload path exposes `payload.cover_letter_stream` as a `ReadableStream` the extension can consume. For now, the orchestrator returns both the final string and the stream; the extension uses the string and the stream is informational",
+        "Validate the cover letter length is in [100, 5000] chars. If outside, retry once with a length-correcting prompt. If still outside, throw `CoverLetterValidationError`; buildPayload catches and falls back to `autoApplicationDefaultCoverLetter`",
+        "Add 3 unit tests in `services/ghostwriter.coverLetterQuality.test.ts`: structured output returns 3 paragraphs; contradiction check (screening says '5 years React', cover letter draft says '3 years' → re-prompt); length <100 chars triggers retry",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: `autoApplicationDefaultCoverLetter` is set to a 200-char string and the LLM fails → `buildPayload` returns that 200-char string as the cover letter (no throw)"
+      ]
+    },
+    {
+      "id": "US-035",
+      "title": "Hardening US-008: defer application row creation, add stale-payload cleanup",
+      "status": "open",
+      "dependsOn": [
+        "US-008"
+      ],
+      "description": "As the orchestrator, I want the application row to be created when the extension actually reports the result (not when buildPayload runs), and a cleanup job for rows stuck in `ready_for_review` for too long, so crashed extensions don't leave ghost rows.",
+      "acceptanceCriteria": [
+        "Change `buildPayload` to NOT create the application row. Instead, return the payload (fields, cover letter, screening answers, PDF) WITHOUT touching the `applications` table",
+        "Move row creation to `recordQueueResult` (in `services/applications.ts`, called by the new `POST /api/applications/queue-result` endpoint in US-011). On `outcome: 'submitted'`, create with `status: 'submitted', submittedAt: now, confirmationId: <from msg>, fieldSnapshot, answersSnapshot`. On `outcome: 'skipped' | 'failed'`, create with `status: <outcome>, errorMessage: <reason>`. On `outcome: 'submitted' | 'skipped' | 'failed'`, set `jobs.lastApplicationId = <new application id>` and `jobs.autoApplicable = false` (job is no longer in the queue)",
+        "Add a cleanup job `cleanupStalePayloads` in `services/applications.ts` that runs on server startup AND every 1 hour via a `setInterval`. It marks any application row with `status = 'ready_for_review'` and `updatedAt < now - 1 hour` as `status: 'skipped', errorMessage: 'stale payload'`. Since US-008's buildPayload no longer creates rows, this cleanup is for rows created by older builds (defensive) and for rows created by other paths",
+        "If `findByJobId(jobId)` finds an existing application row in `ready_for_review` for the same jobId when `recordQueueResult` runs, update it (don't create a new one) — idempotency for the case where the extension reports twice",
+        "Add 2 unit tests in `services/applications.recordQueueResult.test.ts`: `submitted` creates a row and updates the job; `skipped` creates a row with the reason; idempotency on a second call for the same jobId",
+        "biome ci . and orchestrator check:types exit 0",
+        "Negative case: `recordQueueResult` for a `jobId` that does not exist in the `jobs` table throws `notFound` (404)"
+      ]
+    },
+    {
+      "id": "US-036",
+      "title": "Hardening: settings type drift guard",
+      "status": "open",
+      "dependsOn": [
+        "US-008"
+      ],
+      "description": "As a developer, I want a test that fails CI if a setting is added to `settings-registry.ts` without a corresponding entry in the `AppSettings` interface (or vice versa), so the type drift that US-008 had to fix manually doesn't happen again.",
+      "acceptanceCriteria": [
+        "Add `shared/src/settings-registry.drift.test.ts` that: imports the `SETTING_DEFINITIONS` array from `settings-registry.ts` and the `AppSettings` interface from `types/settings.ts`; asserts that every `def.key` in the registry is a key of `AppSettings`",
+        "Add `shared/src/types/settings.drift.test.ts` that asserts every key in `AppSettings` is present in the registry (reverse direction)",
+        "The tests use TypeScript's `keyof typeof` and `keyof AppSettings` for the comparison so they stay accurate when the types evolve",
+        "If the test fails, the error message lists the missing keys (e.g., 'autoApplicationDefaultCoverLetter is in settings-registry.ts but not in AppSettings')",
+        "biome ci . and shared check:types exit 0",
+        "Negative case: temporarily adding a `dummy` key to `settings-registry.ts` and running the test fails with 'dummy is in settings-registry.ts but not in AppSettings'"
       ]
     }
   ]

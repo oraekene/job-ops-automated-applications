@@ -143,6 +143,83 @@ describe.sequential("database migrations", () => {
     );
   });
 
+  it("creates auto_applicable and last_application_id columns on a fresh jobs table", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
+    const script = `
+      import { join } from "node:path";
+      import { pathToFileURL } from "node:url";
+      import Database from "better-sqlite3";
+
+      const dbPath = join(process.env.DATA_DIR, "jobs.db");
+      const migrationUrl = pathToFileURL(join(process.cwd(), "src/server/db/migrate.ts")).href;
+      await import(migrationUrl);
+
+      const db = new Database(dbPath, { readonly: true });
+      const columns = db.prepare("PRAGMA table_info(jobs)").all();
+      const names = columns.map((c) => c.name);
+
+      if (!names.includes("auto_applicable")) {
+        throw new Error("auto_applicable column missing on jobs table after fresh migration");
+      }
+      if (!names.includes("last_application_id")) {
+        throw new Error("last_application_id column missing on jobs table after fresh migration");
+      }
+
+      const autoApplicableCol = columns.find((c) => c.name === "auto_applicable");
+      if (autoApplicableCol.notnull !== 1) {
+        throw new Error("auto_applicable must be NOT NULL");
+      }
+      if (autoApplicableCol.dflt_value !== "0") {
+        throw new Error("auto_applicable default value must be 0");
+      }
+
+      const lastAppIdCol = columns.find((c) => c.name === "last_application_id");
+      if (lastAppIdCol.notnull === 1) {
+        throw new Error("last_application_id must be nullable");
+      }
+
+      db.close();
+    `;
+
+    execFileSync(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", script],
+      {
+        env: {
+          ...process.env,
+          DATA_DIR: tempDir,
+        },
+        stdio: "pipe",
+      },
+    );
+  });
+
+  it("is idempotent: running migrations twice on the same DB exits 0", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
+    const script = `
+      import { join } from "node:path";
+      import { pathToFileURL } from "node:url";
+
+      const dbPath = join(process.env.DATA_DIR, "jobs.db");
+      const migrationUrl = pathToFileURL(join(process.cwd(), "src/server/db/migrate.ts")).href;
+
+      await import(\`\${migrationUrl}?run=first\`);
+      await import(\`\${migrationUrl}?run=second\`);
+    `;
+
+    execFileSync(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", script],
+      {
+        env: {
+          ...process.env,
+          DATA_DIR: tempDir,
+        },
+        stdio: "pipe",
+      },
+    );
+  });
+
   it("adds the tracer-link composite unique index to legacy tables", async () => {
     tempDir = await mkdtemp(join(tmpdir(), "job-ops-migrate-"));
     const script = `
