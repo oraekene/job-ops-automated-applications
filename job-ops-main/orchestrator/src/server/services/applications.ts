@@ -278,7 +278,9 @@ export const applicationService = {
     const tenantId = getActiveTenantId();
     const todayStart = startOfTodayUtcIso();
 
-    // 1. JobIds that have a terminal "completed" application row.
+    // 1. JobIds that have a terminal "completed" application row from today.
+    //    Submissions older than today are treated as "stale" and the job
+    //    is re-queued as pending.
     const completedJobIds = db
       .select({ jobId: schema.applications.jobId })
       .from(schema.applications)
@@ -286,6 +288,7 @@ export const applicationService = {
         and(
           eq(schema.applications.tenantId, tenantId),
           inArray(schema.applications.status, ["submitted", "skipped"]),
+          sql`${schema.applications.updatedAt} >= ${todayStart}`,
         ),
       )
       .all()

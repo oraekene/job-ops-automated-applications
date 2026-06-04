@@ -2,12 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applicationRepository } from "../repositories/applications";
-import { applicationService } from "./applications";
 
 describe.sequential("applicationService.reportQueueResult (US-011)", () => {
   let tempDir: string;
   let jobsRepo: any;
+  let applicationService: any;
+  let applicationRepository: any;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -18,6 +18,9 @@ describe.sequential("applicationService.reportQueueResult (US-011)", () => {
     await import("../db/migrate");
 
     jobsRepo = await import("../repositories/jobs");
+    applicationService = (await import("./applications")).applicationService;
+    applicationRepository = (await import("../repositories/applications"))
+      .applicationRepository;
   });
 
   afterEach(async () => {

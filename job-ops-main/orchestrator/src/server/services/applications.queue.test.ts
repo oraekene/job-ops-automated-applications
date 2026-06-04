@@ -10,7 +10,6 @@ vi.mock("./settings", () => ({
 }));
 
 import {
-  applicationService,
   clampQueueLimit,
   QUEUE_DEFAULT_LIMIT,
   QUEUE_MAX_LIMIT,
@@ -22,6 +21,7 @@ describe.sequential("applicationService.getAutoApplicableQueue (US-010)", () => 
   let jobsRepo: any;
   let db: any;
   let schema: any;
+  let applicationService: any;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -35,6 +35,7 @@ describe.sequential("applicationService.getAutoApplicableQueue (US-010)", () => 
     const dbModule = await import("../db/index");
     db = dbModule.db;
     schema = dbModule.schema;
+    applicationService = (await import("./applications")).applicationService;
   });
 
   afterEach(async () => {

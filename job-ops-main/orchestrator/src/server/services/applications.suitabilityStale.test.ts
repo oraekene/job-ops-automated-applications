@@ -3,8 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applicationService } from "./applications";
-import { onProfileChange } from "./profile";
 import { scoreJobSuitability } from "./scorer";
 
 vi.mock("./scorer", async (importOriginal) => {
@@ -65,6 +63,8 @@ describe.sequential("suitability staleness (US-030)", () => {
   let jobsRepo: any;
   let db: any;
   let schema: any;
+  let applicationService: any;
+  let onProfileChange: any;
   let { getProfile }: { getProfile: any } = { getProfile: vi.fn() };
 
   beforeEach(async () => {
@@ -81,6 +81,8 @@ describe.sequential("suitability staleness (US-030)", () => {
     schema = dbModule.schema;
 
     ({ getProfile } = await import("./profile"));
+    applicationService = (await import("./applications")).applicationService;
+    onProfileChange = (await import("./profile")).onProfileChange;
   });
 
   afterEach(async () => {

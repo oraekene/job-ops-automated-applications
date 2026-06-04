@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applicationService } from "./applications";
 
 vi.mock("./settings", () => ({
   getEffectiveSettings: vi.fn(),
@@ -15,6 +14,7 @@ describe.sequential("applicationService.getQueueStatus (US-012)", () => {
   let db: any;
   let schema: any;
   let applicationRepository: any;
+  let applicationService: any;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -30,6 +30,7 @@ describe.sequential("applicationService.getQueueStatus (US-012)", () => {
     schema = dbModule.schema;
     applicationRepository = (await import("../repositories/applications"))
       .applicationRepository;
+    applicationService = (await import("./applications")).applicationService;
   });
 
   afterEach(async () => {
@@ -156,7 +157,10 @@ describe.sequential("applicationService.getQueueStatus (US-012)", () => {
     const result = await applicationService.getQueueStatus();
     // pending = A, B, C, F = 4
     expect(result.counts.pending).toBe(4);
-    expect(result.counts.submittedToday).toBe(1);
+    // submittedToday: D + G (both have status='submitted' updatedAt today; G is
+    // excluded from pending because it's not auto-applicable, but still counts
+    // as a submitted application today).
+    expect(result.counts.submittedToday).toBe(2);
     expect(result.counts.skippedToday).toBe(1);
     expect(result.counts.failedToday).toBe(0);
     expect(result.lastRunAt).toBe(todayIso);
