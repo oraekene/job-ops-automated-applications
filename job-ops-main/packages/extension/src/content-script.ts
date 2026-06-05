@@ -1,7 +1,8 @@
 import { detectAtsByUrl } from "./drivers/ats-detector";
 import { fillGreenhouseForm } from "./drivers/greenhouse";
 import { fillLeverForm } from "./drivers/lever";
-import { JobOpsApi } from "./lib/jobops-api";
+import type { PayloadResponse } from "./lib/jobops-api";
+import { ApiError } from "./lib/jobops-api";
 
 const API_BASE = "http://localhost:3005";
 const api = new JobOpsApi(API_BASE);
@@ -132,34 +133,154 @@ async function waitForPageStability(): Promise<void> {
 
 function doFill() {
   console.log("JobOps: fill triggered");
-  const profile = {
-    first_name: "John",
-    last_name: "Doe",
-    email: "john@example.com",
-    phone: "+1234567890",
-    linkedin_url: "https://linkedin.com/in/johndoe",
-    current_company: "Acme Corp",
-    cover_letter: "I am excited about this opportunity...",
-    salary: "$120,000",
-  };
+  void runDoFill();
+}
 
-  const atsType = detectAtsByUrl(window.location.href);
-  const atsFiller =
-    atsType === "greenhouse" ? fillGreenhouseForm : fillLeverForm;
+export function extractJobIdFromUrl(url: string): string | null {
   try {
-    const atsResult = atsFiller({ ...profile, screening_answers: {} });
-    console.log("JobOps: ATS driver result:", atsResult);
+    const parsed = new URL(url);
+    const fromQuery = parsed.searchParams.get("jobId");
+    if (fromQuery) return fromQuery;
+    if (parsed.hash.startsWith("#jobId=")) {
+      return parsed.hash.slice("#jobId=".length);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function reportResult(
+  jobId: string | null,
+  outcome: "success" | "skipped" | "failed",
+  extras: {
+    reason?: string;
+    applicationId?: string;
+    error?: { code: string; message: string };
+  } = {},
+): void {
+  try {
+    chrome.runtime.sendMessage({
+      kind: "jobops:result",
+      jobId: jobId ?? "unknown",
+      outcome,
+      ...extras,
+    });
   } catch (err) {
-    console.log("JobOps: ATS driver error, using fallback:", err);
+    console.log("JobOps: failed to send result message", err);
+  }
+}
+
+export async function runDoFill(): Promise<void> {
+  const url = window.location.href;
+  const atsType = detectAtsByUrl(url);
+  const jobId = extractJobIdFromUrl(url);
+  const customQuestions = _extractCustomQuestions(atsType);
+  ensurePanelInjected();
+
+  if (atsType === "unknown") {
+    reportResult(jobId, "skipped", { reason: "unknown ATS" });
+    updatePanel(
+      '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Unknown ATS \u2014 cannot fill.</div>',
+      "Skip",
+      "#ffebee",
+      "#c62828",
+    );
+    return;
   }
 
-  const labelResult = fillFormByLabels(profile);
-  console.log(
-    "JobOps: label-based filler filled",
-    labelResult.filled,
-    "fields",
-  );
+  if (!jobId) {
+    reportResult(jobId, "skipped", { reason: "missing jobId" });
+    updatePanel(
+      '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Missing jobId \u2014 cannot fill.</div>',
+      "Skip",
+      "#ffebee",
+      "#c62828",
+    );
+    return;
+  }
 
+  let payload: PayloadResponse;
+  try {
+    payload = await api.buildPayload(jobId, atsType, customQuestions);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.status === 404) {
+        reportResult(jobId, "skipped", { reason: "profile missing" });
+        updatePanel(
+          '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Complete onboarding first \u2014 profile not found.</div>',
+          "Skip",
+          "#ffebee",
+          "#c62828",
+        );
+        return;
+      }
+      if (err.status === 422) {
+        const reason = err.message || "unprocessable";
+        reportResult(jobId, "skipped", { reason });
+        updatePanel(
+          `<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: ${escapeHtml(reason)}</div>`,
+          "Skip",
+          "#fff3e0",
+          "#e65100",
+        );
+        return;
+      }
+      if (err.status >= 500) {
+        reportResult(jobId, "skipped", { reason: "server error" });
+        updatePanel(
+          '<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: server error</div>',
+          "Skip",
+          "#fff3e0",
+          "#e65100",
+        );
+        return;
+      }
+      reportResult(jobId, "skipped", {
+        reason: err.message,
+        error: { code: err.code, message: err.message },
+      });
+      updatePanel(
+        `<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: ${escapeHtml(err.message)}</div>`,
+        "Skip",
+        "#fff3e0",
+        "#e65100",
+      );
+      return;
+    }
+    if (err instanceof NetworkError) {
+      reportResult(jobId, "skipped", { reason: "network error" });
+      updatePanel(
+        '<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: network error</div>',
+        "Skip",
+        "#fff3e0",
+        "#e65100",
+      );
+      return;
+    }
+    reportResult(jobId, "failed", {
+      reason: "unexpected error",
+      error: {
+        code: "UNEXPECTED",
+        message: err instanceof Error ? err.message : String(err),
+      },
+    });
+    updatePanel(
+      '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Fill failed \u2014 unexpected error.</div>',
+      "Failed",
+      "#ffebee",
+      "#c62828",
+    );
+    return;
+  }
+
+  try {
+    populateAtsForm(payload, atsType);
+  } catch (err) {
+    console.log("JobOps: populateAtsForm threw", err);
+  }
+
+  reportResult(jobId, "success", { applicationId: payload.applicationId });
   updatePanel(
     '<div style="text-align:center;font-size:13px;color:#2e7d32;font-weight:500;">\u2713 Fields filled. Please review and submit manually.</div>',
     "Review",
@@ -167,6 +288,29 @@ function doFill() {
     "#2e7d32",
   );
   startConfirmationMonitoring();
+}
+
+export function populateAtsForm(
+  payload: PayloadResponse,
+  atsType: string,
+): void {
+  const atsFiller =
+    atsType === "greenhouse" ? fillGreenhouseForm : fillLeverForm;
+  try {
+    atsFiller({
+      ...payload.fields,
+      cover_letter: payload.cover_letter,
+      salary: payload.fields.salary,
+      screening_answers: payload.screening_answers,
+    });
+  } catch (err) {
+    console.log("JobOps: ATS driver error, using fallback:", err);
+  }
+  fillFormByLabels({
+    ...payload.fields,
+    cover_letter: payload.cover_letter,
+    salary: payload.fields.salary ?? "",
+  });
 }
 
 function fillFormByLabels(data: Record<string, string>): { filled: number } {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { JobOpsApi } from "../jobops-api";
+import { ApiError, JobOpsApi, NetworkError } from "../jobops-api";
 
 describe("JobOpsApi", () => {
   const api = new JobOpsApi("http://localhost:3005");
@@ -66,24 +66,32 @@ describe("JobOpsApi", () => {
     expect(result.updated).toBe(true);
   });
 
-  it("throws on API error response", async () => {
+  it("throws ApiError with status, code, and message on a non-ok response", async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
+      ok: false,
+      status: 404,
       json: () =>
         Promise.resolve({
           ok: false,
           error: { code: "NOT_FOUND", message: "Job not found" },
         }),
     });
-    await expect(api.prepJob("https://unknown.com", "unknown")).rejects.toThrow(
-      "NOT_FOUND",
-    );
+    await expect(
+      api.prepJob("https://unknown.com", "unknown"),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: "NOT_FOUND",
+      message: "Job not found",
+    });
+    await expect(
+      api.prepJob("https://unknown.com", "unknown"),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 
-  it("throws on network failure", async () => {
+  it("throws NetworkError on a transport failure", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("Failed to fetch"));
-    await expect(api.prepJob("https://test.com", "greenhouse")).rejects.toThrow(
-      "Failed to fetch",
-    );
+    await expect(
+      api.prepJob("https://test.com", "greenhouse"),
+    ).rejects.toBeInstanceOf(NetworkError);
   });
 });

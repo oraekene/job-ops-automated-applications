@@ -45,6 +45,24 @@ export interface ConfirmResponse {
   newStatus: string;
 }
 
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NetworkError";
+  }
+}
+
 export class JobOpsApi {
   constructor(private baseUrl: string) {}
 
@@ -66,7 +84,13 @@ export class JobOpsApi {
             headers: { "Content-Type": "application/json", ...init?.headers },
           });
           const body = await res.json();
-          if (!body.ok) throw new Error(body.error?.code || "UNKNOWN_ERROR");
+          if (!body.ok) {
+            throw new ApiError(
+              res.status,
+              body.error?.code || "UNKNOWN_ERROR",
+              body.error?.message || "Request failed",
+            );
+          }
           return body.data as T;
         } finally {
           clearTimeout(timeout);
@@ -79,14 +103,15 @@ export class JobOpsApi {
           await this.sleep(1000);
           continue;
         }
-        throw new Error(
+        if (err instanceof ApiError) throw err;
+        throw new NetworkError(
           "JobOps: Cannot reach server at " +
             this.baseUrl +
             " - is it running?",
         );
       }
     }
-    throw new Error("UNREACHABLE");
+    throw new NetworkError("UNREACHABLE");
   }
 
   isPdfStale(pdfFreshness: string): boolean {
