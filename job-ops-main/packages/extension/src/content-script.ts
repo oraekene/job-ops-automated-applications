@@ -2,7 +2,7 @@ import { detectAtsByUrl } from "./drivers/ats-detector";
 import { fillGreenhouseForm } from "./drivers/greenhouse";
 import { fillLeverForm } from "./drivers/lever";
 import type { PayloadResponse } from "./lib/jobops-api";
-import { ApiError } from "./lib/jobops-api";
+import { ApiError, JobOpsApi } from "./lib/jobops-api";
 
 const API_BASE = "http://localhost:3005";
 const api = new JobOpsApi(API_BASE);
@@ -306,11 +306,68 @@ export function populateAtsForm(
   } catch (err) {
     console.log("JobOps: ATS driver error, using fallback:", err);
   }
+  _fillCustomQuestions(atsType, payload.screening_answers ?? {});
   fillFormByLabels({
     ...payload.fields,
     cover_letter: payload.cover_letter,
     salary: payload.fields.salary ?? "",
   });
+}
+
+function _fillCustomQuestions(
+  atsType: string,
+  screeningAnswers: Record<string, string>,
+): void {
+  const questions = _extractCustomQuestions(atsType);
+  if (questions.length === 0) return;
+
+  let containers: NodeListOf<HTMLElement> | null = null;
+  let labelSelector: string | null = null;
+  if (atsType === "greenhouse") {
+    containers = document.querySelectorAll<HTMLElement>(
+      '[data-qa^="question_"]',
+    );
+    labelSelector = "label";
+  } else if (atsType === "lever") {
+    containers = document.querySelectorAll<HTMLElement>(
+      "li.application-question.custom-question",
+    );
+    labelSelector = ".application-label";
+  }
+  if (!containers || !labelSelector) return;
+
+  for (const questionText of questions) {
+    const answer = screeningAnswers[questionText];
+    if (!answer) continue;
+
+    let container: HTMLElement | null = null;
+    for (const el of Array.from(containers)) {
+      const label = el.querySelector(labelSelector)?.textContent?.trim();
+      if (label === questionText) {
+        container = el;
+        break;
+      }
+    }
+    if (!container) continue;
+
+    const target = container.querySelector<
+      HTMLInputElement | HTMLTextAreaElement
+    >('textarea, input[type="text"]');
+    if (!target) continue;
+
+    const proto =
+      target instanceof HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (!setter) {
+      target.value = answer;
+      continue;
+    }
+    setter.call(target, answer);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 }
 
 function fillFormByLabels(data: Record<string, string>): { filled: number } {
@@ -402,8 +459,8 @@ function _extractCustomQuestions(atsType: string): string[] {
     return Array.from(
       document.querySelectorAll<HTMLElement>('[data-qa^="question_"] label'),
     )
-      .map((el) => el.innerText?.trim())
-      .filter(Boolean);
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean) as string[];
   }
   if (atsType === "lever") {
     return Array.from(
@@ -411,8 +468,8 @@ function _extractCustomQuestions(atsType: string): string[] {
         "li.application-question.custom-question .application-label",
       ),
     )
-      .map((el) => el.innerText?.trim())
-      .filter(Boolean);
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean) as string[];
   }
   return [];
 }

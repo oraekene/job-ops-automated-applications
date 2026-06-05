@@ -48,7 +48,7 @@ export function fillGreenhouseForm(payload: GreenHousePayload): {
     '[data-qa^="question_"]',
   );
   questions.forEach((q) => {
-    const label = q.querySelector("label")?.innerText || "";
+    const label = q.querySelector("label")?.textContent?.trim() || "";
     const textarea = q.querySelector<HTMLTextAreaElement>("textarea");
     if (textarea && payload.screening_answers[label]) {
       setReactInputValue(textarea, payload.screening_answers[label]);

@@ -52,7 +52,8 @@ export function fillLeverForm(payload: LeverPayload): {
     "li.application-question.custom-question",
   );
   customQuestions.forEach((q) => {
-    const label = q.querySelector(".application-label")?.innerText || "";
+    const label =
+      q.querySelector(".application-label")?.textContent?.trim() || "";
     const textarea = q.querySelector<HTMLTextAreaElement>("textarea");
     const input = q.querySelector<HTMLInputElement>('input[type="text"]');
     const target = textarea || input;
