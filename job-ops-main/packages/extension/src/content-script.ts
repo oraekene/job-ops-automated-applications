@@ -1,6 +1,7 @@
 import { detectAtsByUrl } from "./drivers/ats-detector";
 import { fillGreenhouseForm } from "./drivers/greenhouse";
 import { fillLeverForm } from "./drivers/lever";
+import { uploadResume } from "./drivers/shared/file-injector";
 import type { PayloadResponse } from "./lib/jobops-api";
 import { ApiError, JobOpsApi } from "./lib/jobops-api";
 
@@ -280,6 +281,23 @@ export async function runDoFill(): Promise<void> {
     console.log("JobOps: populateAtsForm threw", err);
   }
 
+  const resumeInput = findResumeUploadInput(atsType);
+  const uploaded = uploadResume(
+    resumeInput,
+    payload.resume_pdf_base64,
+    payload.resume_filename,
+  );
+  if (!uploaded) {
+    reportResult(jobId, "skipped", { reason: "no resume upload input" });
+    updatePanel(
+      '<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">No resume upload field on this form \u2014 skipped.</div>',
+      "Skip",
+      "#fff3e0",
+      "#e65100",
+    );
+    return;
+  }
+
   reportResult(jobId, "success", { applicationId: payload.applicationId });
   updatePanel(
     '<div style="text-align:center;font-size:13px;color:#2e7d32;font-weight:500;">\u2713 Fields filled. Please review and submit manually.</div>',
@@ -288,6 +306,23 @@ export async function runDoFill(): Promise<void> {
     "#2e7d32",
   );
   startConfirmationMonitoring();
+}
+
+/**
+ * Find the ATS-specific file input for the tailored resume.
+ * Greenhouse exposes a stable data-qa selector; Lever has no resume upload
+ * field in its standard application form, so it returns null.
+ */
+function findResumeUploadInput(atsType: string): HTMLInputElement | null {
+  if (atsType === "greenhouse") {
+    return document.querySelector<HTMLInputElement>(
+      'input[data-qa="resume-upload-input"]',
+    );
+  }
+  if (atsType === "lever") {
+    return document.querySelector<HTMLInputElement>('input[type="file"]');
+  }
+  return null;
 }
 
 export function populateAtsForm(

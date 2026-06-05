@@ -51,6 +51,16 @@ vi.mock("../drivers/lever", () => ({
   fillLeverForm: vi.fn(() => ({ filled: 5 })),
 }));
 
+const { uploadFlags } = vi.hoisted(() => ({
+  uploadFlags: { dataTransferPresent: true },
+}));
+vi.mock("../drivers/shared/file-injector", () => ({
+  uploadResume: vi.fn(
+    (input: HTMLInputElement | null) =>
+      uploadFlags.dataTransferPresent && input !== null,
+  ),
+}));
+
 import {
   extractJobIdFromUrl,
   populateAtsForm,
@@ -109,6 +119,9 @@ describe("runDoFill", () => {
 
   it("on 200 calls populateAtsForm and reports success with applicationId", async () => {
     setLocationHref("https://boards.greenhouse.io/acme/jobs/1?jobId=job-200");
+    uploadFlags.dataTransferPresent = true;
+    document.body.innerHTML =
+      '<input type="file" data-qa="resume-upload-input" />';
     buildPayloadMock.mockResolvedValue({
       applicationId: "app-200",
       fields: {
@@ -135,6 +148,39 @@ describe("runDoFill", () => {
         jobId: "job-200",
         outcome: "success",
         applicationId: "app-200",
+      }),
+    );
+  });
+
+  it("on 200 but no resume upload input reports skipped 'no resume upload input' (Lever)", async () => {
+    setLocationHref("https://jobs.lever.co/globex/abc-1?jobId=job-lever");
+    uploadFlags.dataTransferPresent = true;
+    document.body.innerHTML = "";
+    buildPayloadMock.mockResolvedValue({
+      applicationId: "app-lever",
+      fields: {
+        first_name: "Ada",
+        last_name: "Lovelace",
+        email: "ada@example.com",
+        phone: "+44 7000 000000",
+        linkedin_url: "https://www.linkedin.com/in/ada",
+        current_company: "Engines Ltd",
+        salary: "100000",
+      },
+      cover_letter: "Dear Hiring Manager...",
+      screening_answers: {},
+      resume_pdf_base64: "JVBER",
+      resume_filename: "resume_lever.pdf",
+    });
+
+    await runDoFill();
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "jobops:result",
+        jobId: "job-lever",
+        outcome: "skipped",
+        reason: "no resume upload input",
       }),
     );
   });
