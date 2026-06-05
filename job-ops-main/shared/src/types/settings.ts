@@ -248,6 +248,7 @@ export interface AppSettings {
   autoApplicationEnabled: Resolved<boolean>;
   autoApplicationDefaultCoverLetter: Resolved<string>;
   autoApplicationSalaryRequirement: Resolved<string>;
+  autoApplicationPdfMaxAgeDays: Resolved<number>;
 
   // Model variants (no own default, fallback to model.value):
   modelScorer: ModelResolved;

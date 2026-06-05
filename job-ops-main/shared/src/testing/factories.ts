@@ -284,5 +284,6 @@ export const createAppSettings = (
   autoApplicationEnabled: { value: false, default: false, override: null },
   autoApplicationDefaultCoverLetter: { value: "", default: "", override: null },
   autoApplicationSalaryRequirement: { value: "", default: "", override: null },
+  autoApplicationPdfMaxAgeDays: { value: 7, default: 7, override: null },
   ...overrides,
 });

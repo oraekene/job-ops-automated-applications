@@ -15,6 +15,12 @@ vi.mock("./pdf", () => ({
   pdfExists: vi.fn().mockResolvedValue(false),
 }));
 
+vi.mock("./settings", () => ({
+  getEffectiveSettings: vi.fn().mockResolvedValue({
+    autoApplicationPdfMaxAgeDays: { value: 7, default: 7, override: null },
+  }),
+}));
+
 import { pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { scoreJobSuitability } from "./scorer";
@@ -100,7 +106,7 @@ describe.sequential("applicationService.prepJob pdfFreshness (US-005)", () => {
     const result = await applicationService.prepJob(url, "greenhouse");
 
     expect(result.hasTailoredPdf).toBe(false);
-    expect(result.pdfFreshness).toBeUndefined();
+    expect(result.pdfFreshness).toBeNull();
   });
 
   it("returns hasTailoredPdf:false when the file is missing on disk even if the row has a stale timestamp", async () => {
@@ -137,6 +143,6 @@ describe.sequential("applicationService.prepJob pdfFreshness (US-005)", () => {
     const result = await applicationService.prepJob(url, "greenhouse");
 
     expect(result.hasTailoredPdf).toBe(false);
-    expect(result.pdfFreshness).toBeUndefined();
+    expect(result.pdfFreshness).toBeNull();
   });
 });

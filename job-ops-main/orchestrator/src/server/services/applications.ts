@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { notFound, unprocessableEntity } from "@infra/errors";
@@ -19,8 +20,8 @@ import {
 import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { mapProfileToPrepProfile } from "./profileNormalize";
-import { recomputeAndPersistSuitabilityScore } from "./suitability";
 import { getEffectiveSettings } from "./settings";
+import { recomputeAndPersistSuitabilityScore } from "./suitability";
 
 /** Suitability scores older than this are considered stale. */
 const SUITABILITY_STALENESS_DAYS = 7;
@@ -46,7 +47,9 @@ export interface PrepResult {
   };
   profile?: PrepProfile | null;
   hasTailoredPdf: boolean;
-  pdfFreshness?: string;
+  pdfFreshness?: string | null;
+  pdfStale: boolean;
+  pdfStaleReason?: "age" | "fingerprint" | "regenerating";
   applicationId: string | null;
   suitabilityStale: boolean;
 }
@@ -92,6 +95,7 @@ export const applicationService = {
       return {
         exists: false,
         hasTailoredPdf: false,
+        pdfStale: false,
         applicationId: null,
         suitabilityStale: false,
       };
@@ -101,7 +105,12 @@ export const applicationService = {
     const profile = fullProfile ? mapProfileToPrepProfile(fullProfile) : null;
     const { score: suitabilityScore, stale: suitabilityStale } =
       await resolveSuitabilityScore(job, fullProfile);
-    const { hasTailoredPdf, pdfFreshness } = await resolvePdfFreshness(job);
+    const baseResumeFingerprint =
+      await computeBaseResumeFingerprint(fullProfile);
+    const settings = await getEffectiveSettings();
+    const maxPdfAgeDays = settings.autoApplicationPdfMaxAgeDays.value;
+    const { hasTailoredPdf, pdfFreshness, pdfStale, pdfStaleReason } =
+      await resolvePdfFreshness(job, baseResumeFingerprint, maxPdfAgeDays);
 
     return {
       exists: true,
@@ -115,6 +124,8 @@ export const applicationService = {
       profile,
       hasTailoredPdf,
       pdfFreshness,
+      pdfStale,
+      pdfStaleReason,
       applicationId: null,
       suitabilityStale,
     };
@@ -572,22 +583,84 @@ function startOfTodayUtcIso(): string {
 
 async function resolvePdfFreshness(
   job: Job,
-): Promise<{ hasTailoredPdf: boolean; pdfFreshness?: string }> {
+  baseResumeFingerprint: string | null,
+  maxPdfAgeDays: number,
+): Promise<{
+  hasTailoredPdf: boolean;
+  pdfFreshness: string | null;
+  pdfStale: boolean;
+  pdfStaleReason?: "age" | "fingerprint" | "regenerating";
+}> {
+  if (job.pdfRegenerating) {
+    return {
+      hasTailoredPdf: false,
+      pdfFreshness: null,
+      pdfStale: false,
+      pdfStaleReason: "regenerating",
+    };
+  }
   if (!job.pdfGeneratedAt) {
-    return { hasTailoredPdf: false };
+    return { hasTailoredPdf: false, pdfFreshness: null, pdfStale: false };
   }
   try {
     const exists = await pdfExists(job.id);
     if (!exists) {
-      return { hasTailoredPdf: false };
+      return { hasTailoredPdf: false, pdfFreshness: null, pdfStale: false };
     }
-    return { hasTailoredPdf: true, pdfFreshness: job.pdfGeneratedAt };
+    const ageMs = Date.now() - new Date(job.pdfGeneratedAt).getTime();
+    const ageStale = ageMs > maxPdfAgeDays * MS_PER_DAY;
+    const fingerprintStale =
+      baseResumeFingerprint !== null &&
+      job.pdfFingerprint !== null &&
+      job.pdfFingerprint !== baseResumeFingerprint;
+    if (ageStale) {
+      return {
+        hasTailoredPdf: true,
+        pdfFreshness: job.pdfGeneratedAt,
+        pdfStale: true,
+        pdfStaleReason: "age",
+      };
+    }
+    if (fingerprintStale) {
+      return {
+        hasTailoredPdf: true,
+        pdfFreshness: job.pdfGeneratedAt,
+        pdfStale: true,
+        pdfStaleReason: "fingerprint",
+      };
+    }
+    return {
+      hasTailoredPdf: true,
+      pdfFreshness: job.pdfGeneratedAt,
+      pdfStale: false,
+    };
   } catch (error) {
     logger.warn("PDF existence check failed, treating as missing", {
       jobId: job.id,
       error,
     });
-    return { hasTailoredPdf: false };
+    return { hasTailoredPdf: false, pdfFreshness: null, pdfStale: false };
+  }
+}
+
+/**
+ * Compute a short, stable fingerprint of the base resume content.
+ * Returns null if no profile is available, in which case the caller should
+ * fall back to age-based staleness only.
+ */
+async function computeBaseResumeFingerprint(
+  profile: ResumeProfile | null,
+): Promise<string | null> {
+  if (!profile) return null;
+  try {
+    const json = JSON.stringify(profile);
+    return createHash("sha256").update(json).digest("hex").slice(0, 16);
+  } catch (error) {
+    logger.warn(
+      "Could not compute base resume fingerprint; age-based staleness only",
+      { error },
+    );
+    return null;
   }
 }
 

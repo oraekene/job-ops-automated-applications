@@ -960,6 +960,14 @@ export const settingsRegistry = {
     parse: (v: string | undefined): string => v ?? "",
     serialize: (v: string | null | undefined): string | null => v ?? null,
   },
+  autoApplicationPdfMaxAgeDays: {
+    kind: "typed" as const,
+    envKey: "AUTO_APP_PDF_MAX_AGE_DAYS",
+    schema: z.number().int().min(1).max(365),
+    default: (): number => 7,
+    parse: parseIntOrNull,
+    serialize: serializeNullableNumber,
+  },
 
   // --- Aliases ---
   jobspyLocation: {

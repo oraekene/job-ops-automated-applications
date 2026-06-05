@@ -14,7 +14,9 @@ vi.mock("./scorer", async (importOriginal) => {
 });
 
 vi.mock("./settings", () => ({
-  getEffectiveSettings: vi.fn(),
+  getEffectiveSettings: vi.fn().mockResolvedValue({
+    autoApplicationPdfMaxAgeDays: { value: 7, default: 7, override: null },
+  }),
 }));
 
 vi.mock("./profile", async (importOriginal) => {
