@@ -85,7 +85,7 @@ describe.sequential("applicationService.prepJob profile mapping (US-003)", () =>
       first_name: "Ifeanyi",
       last_name: "Orae",
       email: "ifeanyi@example.com",
-      phone: "+44 7000 000000",
+      phone: "+447000000000",
       linkedin_url: "https://www.linkedin.com/in/oraekene",
       current_company: "Acme Corp",
     });

@@ -9,6 +9,7 @@ vi.mock("./profile", () => ({
 
 vi.mock("./ghostwriter", () => ({
   generateScreeningAnswersForJob: vi.fn(),
+  generateCoverLetterForJob: vi.fn(),
 }));
 
 vi.mock("./pdf", () => ({
@@ -54,9 +55,12 @@ describe.sequential("applicationService.buildPayload PDF generation (US-007)", (
       jobUrl: url,
     });
 
-    // Write a fake PDF file at a known path under tempDir
+    // Write a fake PDF file at a known path under tempDir. Use a body large
+    // enough that the base64 encoding exceeds 1000 chars (the test's lower
+    // bound for a "real PDF" payload).
     const pdfPath = join(tempDir, "resume.pdf");
-    const fakePdf = Buffer.from("%PDF-1.4\n%fake pdf body for testing\n%%EOF");
+    const pdfBody = "x".repeat(1500);
+    const fakePdf = Buffer.from(`%PDF-1.4\n${pdfBody}\n%%EOF`);
     await writeFile(pdfPath, fakePdf);
 
     vi.mocked(getProfile).mockResolvedValue({

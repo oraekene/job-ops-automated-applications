@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,15 +9,23 @@ vi.mock("./profile", () => ({
 
 vi.mock("./ghostwriter", () => ({
   generateScreeningAnswersForJob: vi.fn(),
+  generateCoverLetterForJob: vi.fn(),
 }));
 
-import { generateScreeningAnswersForJob } from "./ghostwriter";
-import { getProfile } from "./profile";
+vi.mock("./pdf", () => ({
+  generatePdf: vi.fn(),
+  getPdfPath: vi.fn(),
+}));
 
 describe.sequential("applicationService.buildPayload screening answers (US-006)", () => {
   let tempDir: string;
   let jobsRepo: any;
   let applicationService: any;
+  let getProfile: any;
+  let generateScreeningAnswersForJob: any;
+  let generateCoverLetterForJob: any;
+  let generatePdf: any;
+  let getPdfPath: any;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -31,6 +39,23 @@ describe.sequential("applicationService.buildPayload screening answers (US-006)"
 
     jobsRepo = await import("../repositories/jobs");
     applicationService = (await import("./applications")).applicationService;
+
+    // Re-import mocks AFTER vi.resetModules so they match the references
+    // that applications.ts picks up on its dynamic import.
+    ({ getProfile } = await import("./profile"));
+    ({ generateScreeningAnswersForJob, generateCoverLetterForJob } =
+      await import("./ghostwriter"));
+    ({ generatePdf, getPdfPath } = await import("./pdf"));
+
+    // Write a real PDF file the mocked getPdfPath will return.
+    const pdfPath = join(tempDir, "fake.pdf");
+    const fakePdf = Buffer.from(`%PDF-1.4\n${"x".repeat(1500)}\n%%EOF`);
+    await writeFile(pdfPath, fakePdf);
+    vi.mocked(generatePdf).mockResolvedValue({
+      success: true,
+      pdfPath,
+    } as any);
+    vi.mocked(getPdfPath).mockReturnValue(pdfPath);
   });
 
   afterEach(async () => {

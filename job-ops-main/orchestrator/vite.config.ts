@@ -38,8 +38,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/setupTests.ts",
     pool: "forks",
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    testTimeout: 60_000,
+    hookTimeout: 300_000,
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",

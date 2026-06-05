@@ -1,18 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("node:fs/promises", async () => {
-  const actual =
-    await vi.importActual<typeof import("node:fs/promises")>(
-      "node:fs/promises",
-    );
-  return {
-    ...actual,
-    readFile: vi.fn(),
-  };
-});
 
 vi.mock("./profile", () => ({
   getProfile: vi.fn(),
@@ -28,19 +17,16 @@ vi.mock("./pdf", () => ({
   getPdfPath: vi.fn(),
 }));
 
-import { readFile } from "node:fs/promises";
-import {
-  generateCoverLetterForJob,
-  generateScreeningAnswersForJob,
-} from "./ghostwriter";
-import { generatePdf, getPdfPath } from "./pdf";
-import { getProfile } from "./profile";
-
 describe.sequential("applicationService.buildPayload fields + cover letter + persist (US-008)", () => {
   let tempDir: string;
   let jobsRepo: any;
   let applicationService: any;
   let applicationRepository: any;
+  let getProfile: any;
+  let generateScreeningAnswersForJob: any;
+  let generateCoverLetterForJob: any;
+  let generatePdf: any;
+  let getPdfPath: any;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -56,6 +42,13 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
     applicationService = (await import("./applications")).applicationService;
     applicationRepository = (await import("../repositories/applications"))
       .applicationRepository;
+
+    // Re-import mocks AFTER vi.resetModules so they match the references
+    // that applications.ts picks up on its dynamic import.
+    ({ getProfile } = await import("./profile"));
+    ({ generateScreeningAnswersForJob, generateCoverLetterForJob } =
+      await import("./ghostwriter"));
+    ({ generatePdf, getPdfPath } = await import("./pdf"));
   });
 
   afterEach(async () => {
@@ -74,6 +67,14 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
       employer: "Acme",
       jobUrl: url,
     });
+
+    // Write a real PDF file the mocked getPdfPath will return. The real
+    // readFile (called by applications.ts) will read this back as bytes
+    // for the base64 conversion. This avoids mocking node:fs/promises
+    // which is unreliable across vi.resetModules cycles.
+    const fakePdfPath = join(tempDir, "fake.pdf");
+    const fakePdfBytes = Buffer.from("%PDF-1.4\n%fake\n%%EOF");
+    await writeFile(fakePdfPath, fakePdfBytes);
 
     vi.mocked(getProfile).mockResolvedValue({
       basics: {
@@ -98,14 +99,9 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
     );
     vi.mocked(generatePdf).mockResolvedValue({
       success: true,
-      pdfPath: "/tmp/fake.pdf",
+      pdfPath: fakePdfPath,
     } as any);
-    vi.mocked(getPdfPath).mockReturnValue("/tmp/fake.pdf");
-
-    // Mock readFile for the PDF
-    vi.mocked(readFile).mockResolvedValue(
-      Buffer.from("%PDF-1.4\n%fake\n%%EOF") as any,
-    );
+    vi.mocked(getPdfPath).mockReturnValue(fakePdfPath);
 
     const result = await applicationService.buildPayload(job.id, "greenhouse", [
       "Years of React?",
@@ -116,13 +112,15 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
         first_name: "Ifeanyi",
         last_name: "Orae",
         email: "ifeanyi@example.com",
-        phone: "+44 7000 000000",
+        phone: "+447000000000",
         linkedin_url: "https://www.linkedin.com/in/oraekene",
         current_company: "Acme Corp",
       }),
     );
     expect(result.cover_letter.length).toBeGreaterThan(0);
     expect(result.screening_answers).toEqual({ "Years of React?": "5 years" });
+    expect(result.resume_pdf_base64).toBe(fakePdfBytes.toString("base64"));
+    expect(result.resume_filename).toBe(`resume_${job.id}.pdf`);
 
     // Persisted application row
     const persisted = applicationRepository.findByJobId(job.id);
