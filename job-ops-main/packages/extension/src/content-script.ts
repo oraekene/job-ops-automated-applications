@@ -2,8 +2,8 @@ import { detectAtsByUrl } from "./drivers/ats-detector";
 import { fillGreenhouseForm } from "./drivers/greenhouse";
 import { fillLeverForm } from "./drivers/lever";
 import { uploadResume } from "./drivers/shared/file-injector";
-import type { PayloadResponse } from "./lib/jobops-api";
-import { ApiError, JobOpsApi } from "./lib/jobops-api";
+import type { JobopsResult, PayloadResponse } from "./lib/jobops-api";
+import { ApiError, JobOpsApi, NetworkError } from "./lib/jobops-api";
 
 const API_BASE = "http://localhost:3005";
 const api = new JobOpsApi(API_BASE);
@@ -153,23 +153,49 @@ export function extractJobIdFromUrl(url: string): string | null {
 
 export function reportResult(
   jobId: string | null,
-  outcome: "success" | "skipped" | "failed",
+  outcome: "submitted" | "skipped" | "failed",
   extras: {
     reason?: string;
-    applicationId?: string;
-    error?: { code: string; message: string };
+    confirmationId?: string;
+    fieldSnapshot?: Record<string, string>;
+    answersSnapshot?: Record<string, string>;
+    screenshotBase64?: string;
   } = {},
 ): void {
   try {
-    chrome.runtime.sendMessage({
+    const result: JobopsResult = {
       kind: "jobops:result",
       jobId: jobId ?? "unknown",
       outcome,
       ...extras,
-    });
+    };
+    chrome.runtime.sendMessage(result);
   } catch (err) {
     console.log("JobOps: failed to send result message", err);
   }
+}
+
+export function extractConfirmationId(): string | null {
+  try {
+    const parsed = new URL(window.location.href);
+    const ghJid = parsed.searchParams.get("gh_jid");
+    if (ghJid) return ghJid;
+    const confirmMatch = parsed.pathname.match(
+      /\/confirmation\/([^/]+)/,
+    );
+    if (confirmMatch?.[1]) return confirmMatch[1];
+  } catch {
+    // ignore
+  }
+  const text = document.body?.innerText ?? "";
+  if (
+    /Your application has been submitted/i.test(text)
+  ) {
+    const el = document.querySelector("[data-confirmation-id]");
+    const attr = el?.getAttribute("data-confirmation-id");
+    if (attr) return attr;
+  }
+  return null;
 }
 
 export async function runDoFill(): Promise<void> {
@@ -298,7 +324,11 @@ export async function runDoFill(): Promise<void> {
     return;
   }
 
-  reportResult(jobId, "success", { applicationId: payload.applicationId });
+  reportResult(jobId, "submitted", {
+    confirmationId: extractConfirmationId() ?? undefined,
+    fieldSnapshot: payload.fields,
+    answersSnapshot: payload.screening_answers,
+  });
   updatePanel(
     '<div style="text-align:center;font-size:13px;color:#2e7d32;font-weight:500;">\u2713 Fields filled. Please review and submit manually.</div>',
     "Review",

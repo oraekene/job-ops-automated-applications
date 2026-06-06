@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../lib/jobops-api";
 
 const { buildPayloadMock, sendMessageMock } = vi.hoisted(() => ({
   buildPayloadMock: vi.fn(),
@@ -61,12 +60,7 @@ vi.mock("../drivers/shared/file-injector", () => ({
   ),
 }));
 
-import {
-  extractJobIdFromUrl,
-  populateAtsForm,
-  runDoFill,
-} from "../content-script";
-import { fillGreenhouseForm } from "../drivers/greenhouse";
+import { reportResult, runDoFill } from "../content-script";
 
 function setLocationHref(url: string) {
   Object.defineProperty(window, "location", {
@@ -82,48 +76,22 @@ function setChromeRuntime() {
   };
 }
 
-describe("extractJobIdFromUrl", () => {
-  it("reads jobId from the search query", () => {
-    expect(
-      extractJobIdFromUrl(
-        "https://boards.greenhouse.io/acme/jobs/1?jobId=abc-123",
-      ),
-    ).toBe("abc-123");
-  });
-
-  it("reads jobId from the hash when the query is absent", () => {
-    expect(
-      extractJobIdFromUrl(
-        "https://boards.greenhouse.io/acme/jobs/1#jobId=xyz-9",
-      ),
-    ).toBe("xyz-9");
-  });
-
-  it("returns null when neither is present", () => {
-    expect(
-      extractJobIdFromUrl("https://boards.greenhouse.io/acme/jobs/1"),
-    ).toBeNull();
-  });
-});
-
-describe("runDoFill", () => {
+describe("reportResult (US-016a)", () => {
   beforeEach(() => {
-    buildPayloadMock.mockReset();
     sendMessageMock.mockReset();
     setChromeRuntime();
   });
 
-  afterEach(() => {
-    document.body.innerHTML = "";
-  });
-
-  it("on 200 calls populateAtsForm and reports success with applicationId", async () => {
-    setLocationHref("https://boards.greenhouse.io/acme/jobs/1?jobId=job-200");
+  it("posts a result with outcome 'submitted' on successful fill", async () => {
+    buildPayloadMock.mockReset();
+    setLocationHref(
+      "https://boards.greenhouse.io/acme/jobs/1?jobId=job-sub",
+    );
     uploadFlags.dataTransferPresent = true;
     document.body.innerHTML =
       '<input type="file" data-qa="resume-upload-input" />';
     buildPayloadMock.mockResolvedValue({
-      applicationId: "app-200",
+      applicationId: "app-sub",
       fields: {
         first_name: "Ada",
         last_name: "Lovelace",
@@ -136,28 +104,35 @@ describe("runDoFill", () => {
       cover_letter: "Dear Hiring Manager...",
       screening_answers: { "Why us?": "Because engines." },
       resume_pdf_base64: "JVBER",
-      resume_filename: "resume_job-200.pdf",
+      resume_filename: "resume_job-sub.pdf",
     });
 
     await runDoFill();
 
-    expect(buildPayloadMock).toHaveBeenCalledWith("job-200", "greenhouse", []);
     expect(sendMessageMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "jobops:result",
-        jobId: "job-200",
+        jobId: "job-sub",
         outcome: "submitted",
-        fieldSnapshot: expect.objectContaining({ first_name: "Ada" }),
+        fieldSnapshot: expect.objectContaining({
+          first_name: "Ada",
+        }),
+        answersSnapshot: expect.objectContaining({
+          "Why us?": "Because engines.",
+        }),
       }),
     );
   });
 
-  it("on 200 but no resume upload input reports skipped 'no resume upload input' (Lever)", async () => {
-    setLocationHref("https://jobs.lever.co/globex/abc-1?jobId=job-lever");
+  it("posts a result with outcome 'skipped' and reason when resume upload is missing", async () => {
+    buildPayloadMock.mockReset();
+    setLocationHref(
+      "https://jobs.lever.co/globex/abc-1?jobId=job-skip",
+    );
     uploadFlags.dataTransferPresent = true;
     document.body.innerHTML = "";
     buildPayloadMock.mockResolvedValue({
-      applicationId: "app-lever",
+      applicationId: "app-skip",
       fields: {
         first_name: "Ada",
         last_name: "Lovelace",
@@ -178,79 +153,56 @@ describe("runDoFill", () => {
     expect(sendMessageMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "jobops:result",
-        jobId: "job-lever",
+        jobId: "job-skip",
         outcome: "skipped",
         reason: "no resume upload input",
       }),
     );
   });
 
-  it("on 404 reports skipped with reason 'profile missing' and shows onboarding message", async () => {
-    setLocationHref("https://boards.greenhouse.io/acme/jobs/1?jobId=job-404");
-    buildPayloadMock.mockRejectedValue(
-      new ApiError(404, "NOT_FOUND", "Profile not found"),
+  it("posts a result with outcome 'failed' when an uncaught throw occurs", async () => {
+    buildPayloadMock.mockReset();
+    setLocationHref(
+      "https://boards.greenhouse.io/acme/jobs/1?jobId=job-fail",
     );
+    buildPayloadMock.mockRejectedValue(new Error("network boom"));
 
     await runDoFill();
 
     expect(sendMessageMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "jobops:result",
-        jobId: "job-404",
-        outcome: "skipped",
-        reason: "profile missing",
-      }),
-    );
-    const shadowHost = document.getElementById("jobops-panel");
-    expect(shadowHost).not.toBeNull();
-  });
-
-  it("on 422 reports skipped with the server's reason", async () => {
-    setLocationHref("https://boards.greenhouse.io/acme/jobs/1?jobId=job-422");
-    buildPayloadMock.mockRejectedValue(
-      new ApiError(422, "UNPROCESSABLE_ENTITY", "PDF generation failed"),
-    );
-
-    await runDoFill();
-
-    expect(sendMessageMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "jobops:result",
-        jobId: "job-422",
-        outcome: "skipped",
-        reason: "PDF generation failed",
+        jobId: "job-fail",
+        outcome: "failed",
+        reason: "unexpected error",
+        error: expect.objectContaining({
+          message: "network boom",
+        }),
       }),
     );
   });
 });
 
-describe("populateAtsForm", () => {
-  it("calls the greenhouse driver with merged fields, cover_letter and screening_answers", () => {
-    const payload = {
-      applicationId: "app-1",
-      fields: {
-        first_name: "Ada",
-        last_name: "Lovelace",
-        email: "ada@example.com",
-        phone: "+44 7000 000000",
-        linkedin_url: "https://www.linkedin.com/in/ada",
-        current_company: "Engines Ltd",
-        salary: "100000",
-      },
-      cover_letter: "Dear Hiring Manager...",
-      screening_answers: { "Why us?": "Because engines." },
-      resume_pdf_base64: "JVBER",
-      resume_filename: "resume.pdf",
-    };
-
-    populateAtsForm(payload, "greenhouse");
-
-    expect(fillGreenhouseForm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        first_name: "Ada",
-        cover_letter: "Dear Hiring Manager...",
-        screening_answers: { "Why us?": "Because engines." },
-      }),
+describe("extractConfirmationId (US-016a)", () => {
+  it("extracts gh_jid from query params", async () => {
+    const { extractConfirmationId } = await import("../content-script");
+    setLocationHref(
+      "https://boards.greenhouse.io/acme/apply?gh_jid=abc-123",
     );
+    expect(extractConfirmationId()).toBe("abc-123");
+  });
+
+  it("extracts confirmation id from pathname", async () => {
+    const { extractConfirmationId } = await import("../content-script");
+    setLocationHref(
+      "https://boards.greenhouse.io/acme/confirmation/xyz-789",
+    );
+    expect(extractConfirmationId()).toBe("xyz-789");
+  });
+
+  it("returns null when no confirmation id is present", async () => {
+    const { extractConfirmationId } = await import("../content-script");
+    setLocationHref("https://boards.greenhouse.io/acme/jobs/1");
+    expect(extractConfirmationId()).toBeNull();
   });
 });

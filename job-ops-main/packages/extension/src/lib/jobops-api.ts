@@ -1,3 +1,14 @@
+export interface JobopsResult {
+  kind: "jobops:result";
+  jobId: string;
+  outcome: "submitted" | "skipped" | "failed";
+  reason?: string;
+  confirmationId?: string;
+  fieldSnapshot?: Record<string, string>;
+  answersSnapshot?: Record<string, string>;
+  screenshotBase64?: string;
+}
+
 export interface PrepResponse {
   exists: boolean;
   job?: {

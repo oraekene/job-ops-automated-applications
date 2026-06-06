@@ -1,5 +1,9 @@
 import { detectAtsByUrl } from "./src/drivers/ats-detector";
-import { JobOpsApi, type QueueItem } from "./src/lib/jobops-api";
+import {
+  JobOpsApi,
+  type JobopsResult,
+  type QueueItem,
+} from "./src/lib/jobops-api";
 
 const ALARM_NAME = "jobops-poll";
 const POLL_PERIOD_MINUTES = 0.5;
@@ -126,6 +130,46 @@ chromeStorage.onChanged.addListener((changes, area) => {
     state = "idle";
   }
 });
+
+chrome.runtime.onMessage.addListener(
+  (message: JobopsResult, sender) => {
+    if (message.kind !== "jobops:result") return;
+
+    const tabId = sender.tab?.id;
+    const jobId = message.jobId;
+
+    if (message.outcome === "submitted" && typeof tabId === "number") {
+      chromeTabs.captureVisibleTab(
+        tabId,
+        { format: "png" },
+        (dataUrl) => {
+          const screenshotBase64 = dataUrl
+            ? dataUrl.split(",")[1]
+            : undefined;
+          api
+            .confirmSubmission({
+              jobId,
+              applicationId: message.confirmationId ?? "",
+              atsType: "unknown",
+              confirmationId: message.confirmationId ?? "",
+              submittedAt: new Date().toISOString(),
+              fieldSnapshot: message.fieldSnapshot ?? {},
+              answersSnapshot: message.answersSnapshot ?? {},
+              screenshotBase64: screenshotBase64 ?? "",
+            })
+            .catch((err) =>
+              console.warn("JobOps: confirmSubmission failed", err),
+            );
+        },
+      );
+    }
+
+    if (typeof tabId === "number") {
+      dispatching.delete(jobId);
+      chromeTabs.remove(tabId).catch(() => {});
+    }
+  },
+);
 
 void isToggleOn()
   .then((on) => {
