@@ -76,11 +76,11 @@ describe("background service worker (poll loop)", () => {
       periodInMinutes: 0.5,
     });
     expect(mock.tabs.create).toHaveBeenCalledWith({
-      url: GREENHOUSE_JOB_1.url,
+      url: expect.stringContaining(GREENHOUSE_JOB_1.url),
       active: false,
     });
     expect(mock.tabs.create).toHaveBeenCalledWith({
-      url: LEVER_JOB_2.url,
+      url: expect.stringContaining(LEVER_JOB_2.url),
       active: false,
     });
   });
@@ -158,7 +158,7 @@ describe("background service worker (poll loop)", () => {
 
     expect(mock.tabs.create).toHaveBeenCalledTimes(1);
     expect(mock.tabs.create).toHaveBeenCalledWith({
-      url: GREENHOUSE_JOB_1.url,
+      url: expect.stringContaining(GREENHOUSE_JOB_1.url),
       active: false,
     });
   });

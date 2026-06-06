@@ -5,6 +5,7 @@ const ALARM_NAME = "jobops-poll";
 const POLL_PERIOD_MINUTES = 0.5;
 const BACKOFF_DELAYS_S = [30, 60, 120, 240, 300];
 const QUEUE_LIMIT = 10;
+const MAX_CONCURRENT_TABS = 3;
 const API_BASE = "http://localhost:3005";
 const TOGGLE_KEY = "autoApply.enabled";
 
@@ -13,6 +14,7 @@ type State = "idle" | "polling" | "processing" | "backoff";
 let state: State = "idle";
 let backoffStep = 0;
 let aborted = false;
+const dispatching: Map<string, number> = new Map();
 const api: JobOpsApi = new JobOpsApi(API_BASE);
 
 const chromeAlarms = chrome.alarms;
@@ -30,7 +32,24 @@ function isToggleOn(): Promise<boolean> {
 
 async function dispatchJob(job: QueueItem): Promise<void> {
   if (aborted) return;
-  await chromeTabs.create({ url: job.url, active: false });
+
+  const atsType = detectAtsByUrl(job.url);
+  if (atsType === "unknown") {
+    console.warn("JobOps: skipping unknown ATS", job.url);
+    return;
+  }
+
+  if (dispatching.size >= MAX_CONCURRENT_TABS) {
+    return;
+  }
+
+  const url = new URL(job.url);
+  url.searchParams.set("jobId", job.id);
+
+  const tab = await chromeTabs.create({ url: url.toString(), active: false });
+  if (typeof tab.id === "number") {
+    dispatching.set(job.id, tab.id);
+  }
 }
 
 async function pollAndDispatch(): Promise<void> {
@@ -60,6 +79,7 @@ async function pollAndDispatch(): Promise<void> {
     state = "processing";
     for (const job of jobs) {
       if (aborted) break;
+      if (dispatching.size >= MAX_CONCURRENT_TABS) break;
       await dispatchJob(job);
     }
   }
