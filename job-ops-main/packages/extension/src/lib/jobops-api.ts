@@ -45,6 +45,19 @@ export interface ConfirmResponse {
   newStatus: string;
 }
 
+export interface QueueItem {
+  id: string;
+  url: string;
+  atsType: string;
+  title: string;
+  employer: string;
+  suitabilityScore: number;
+}
+
+export interface QueueResponse {
+  jobs: QueueItem[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -143,5 +156,11 @@ export class JobOpsApi {
       method: "POST",
       body: JSON.stringify(req),
     });
+  }
+
+  getQueue(limit: number): Promise<QueueResponse> {
+    return this.request<QueueResponse>(
+      `/api/applications/queue?limit=${limit}`,
+    );
   }
 }

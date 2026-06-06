@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("background service worker", () => {
   beforeEach(() => {
@@ -6,7 +6,21 @@ describe("background service worker", () => {
     global.chrome = {
       tabs: { onUpdated: { addListener: vi.fn() } },
       scripting: { executeScript: vi.fn().mockResolvedValue(undefined) },
+      alarms: {
+        create: vi.fn(),
+        clear: vi.fn().mockResolvedValue(true),
+        onAlarm: { addListener: vi.fn() },
+      },
+      storage: {
+        local: { get: vi.fn().mockResolvedValue({}), set: vi.fn() },
+        onChanged: { addListener: vi.fn() },
+      },
+      runtime: { onMessage: { addListener: vi.fn() } },
     } as unknown as typeof chrome;
+  });
+
+  afterEach(() => {
+    delete (global as { chrome?: unknown }).chrome;
   });
 
   it("should register onUpdated listener on init", async () => {

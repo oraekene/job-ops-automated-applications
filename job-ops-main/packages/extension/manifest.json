@@ -3,7 +3,7 @@
   "name": "JobOps Copilot",
   "version": "0.1.0",
   "description": "Auto-fill job applications with JobOps AI",
-  "permissions": ["tabs", "scripting", "storage", "activeTab"],
+  "permissions": ["tabs", "scripting", "storage", "alarms", "activeTab"],
   "host_permissions": [
     "https://*.greenhouse.io/*",
     "https://*.lever.co/*",
