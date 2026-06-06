@@ -419,6 +419,10 @@ async function buildScreeningAnswers(
   if (customQuestions.length === 0) {
     return {};
   }
+  const {
+    ScreeningAnswersUnavailableError,
+    ScreeningAnswersValidationError,
+  } = await import("./ghostwriter");
   try {
     const profile = await getProfile();
     const profileRecord =
@@ -431,6 +435,14 @@ async function buildScreeningAnswers(
       questions: customQuestions,
     });
   } catch (error) {
+    if (
+      error instanceof ScreeningAnswersUnavailableError ||
+      error instanceof ScreeningAnswersValidationError
+    ) {
+      throw unprocessableEntity(
+        `Screening answers unavailable for ${customQuestions.length} question(s): ${error.message}`,
+      );
+    }
     logger.warn("buildPayload: screening answer generation failed", {
       jobId,
       error,

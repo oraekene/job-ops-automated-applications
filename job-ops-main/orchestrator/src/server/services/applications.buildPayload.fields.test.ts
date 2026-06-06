@@ -10,6 +10,12 @@ vi.mock("./profile", () => ({
 vi.mock("./ghostwriter", () => ({
   generateScreeningAnswersForJob: vi.fn(),
   generateCoverLetterForJob: vi.fn(),
+  ScreeningAnswersUnavailableError: class ScreeningAnswersUnavailableError extends Error {
+    name = "ScreeningAnswersUnavailableError" as const;
+  },
+  ScreeningAnswersValidationError: class ScreeningAnswersValidationError extends Error {
+    name = "ScreeningAnswersValidationError" as const;
+  },
 }));
 
 vi.mock("./pdf", () => ({

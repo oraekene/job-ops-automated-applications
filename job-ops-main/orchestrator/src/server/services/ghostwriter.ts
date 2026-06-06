@@ -1347,16 +1347,82 @@ const COVER_LETTER_SCHEMA: JsonSchemaDefinition = {
   },
 };
 
+function buildScreeningAnswersPrompt(
+  questions: string[],
+  job: { title?: string; employer?: string; jobDescription?: string | null },
+  profile: Record<string, unknown>,
+): string {
+  const questionsList = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
+  return [
+    `Job: ${job.title ?? "Unknown"} at ${job.employer ?? "Unknown"}`,
+    job.jobDescription
+      ? `Job description:\n${job.jobDescription}`
+      : "Job description: (not available)",
+    "",
+    "Candidate profile (JSON):",
+    JSON.stringify(profile, null, 2),
+    "",
+    "Screening questions:",
+    questionsList,
+    "",
+    'Return JSON of the form {"answers": { "<question>": "<answer>", ... }}.',
+  ].join("\n");
+}
+
+const SCREENING_ANSWERS_SYSTEM_PROMPT = `You are an applicant filling out a job application screening form. You will be given a job description, the candidate's resume profile, and a list of screening questions. Return a JSON object with an "answers" property whose value is a map from each question to a concise, honest, role-specific answer based on the candidate's profile and the job description. Do not invent experience the profile does not support; if the profile does not address a question, say so briefly. Keep each answer to 1-3 sentences.`;
+
+const SCREENING_ANSWERS_REPAIR_PROMPT = `You are filling out a job application screening form. Return a JSON object with an "answers" property mapping each question to a short answer (1-2 sentences). Use the candidate's profile information. If you don't know the answer, say "Not available in profile." Do not return empty answers.`;
+
+/**
+ * Error thrown when the screening answer LLM call fails on both the initial
+ * attempt and a single retry with a repair prompt.
+ */
+export class ScreeningAnswersUnavailableError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "ScreeningAnswersUnavailableError";
+  }
+}
+
+/**
+ * Error thrown when the screening answer response is missing answers for
+ * one or more questions after a retry.
+ */
+export class ScreeningAnswersValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly missingQuestions: string[],
+  ) {
+    super(message);
+    this.name = "ScreeningAnswersValidationError";
+  }
+}
+
 /**
  * Generate screening answers for the supplied custom questions using the
  * existing Ghostwriter LLM machinery. Returns a `{ question: answer }` map
  * with one entry per question. Returns an empty map when there are no
  * questions.
+ *
+ * On LLM throw or JSON parse error, retries once with a repair prompt.
+ * If the retry also fails, throws `ScreeningAnswersUnavailableError`.
+ *
+ * Validates that each question has a non-empty answer. If any are missing,
+ * retries once. If the retry also has missing answers, throws
+ * `ScreeningAnswersValidationError`.
+ *
+ * @param onChunk - Optional callback invoked with each chunk of the
+ *   screening answers JSON as it becomes available. The streaming is
+ *   informational (the final map is still returned).
  */
 export async function generateScreeningAnswersForJob(input: {
   jobId: string;
   profile: Record<string, unknown>;
   questions: string[];
+  onChunk?: (chunk: string) => void;
 }): Promise<Record<string, string>> {
   if (input.questions.length === 0) {
     return {};
@@ -1380,41 +1446,183 @@ export async function generateScreeningAnswersForJob(input: {
     apiKey: llmConfig.apiKey,
   });
 
-  const llmResult = await llm.callJson<{ answers: Record<string, string> }>({
-    model: llmConfig.model,
-    messages: [
-      { role: "system", content: SCREENING_ANSWERS_SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    jsonSchema: SCREENING_ANSWERS_SCHEMA,
-    jobId: input.jobId,
-  });
+  // Attempt 1: original prompt
+  let answers = await callLlmWithRetry(
+    llm,
+    llmConfig.model,
+    prompt,
+    SCREENING_ANSWERS_SYSTEM_PROMPT,
+    input.jobId,
+  );
 
-  if (!llmResult.success) {
-    logger.warn("Screening answer generation failed, returning empty map", {
+  // Validate: check for missing answers
+  const missingQuestions = findMissingAnswers(input.questions, answers);
+  if (missingQuestions.length > 0) {
+    logger.info("Screening answers have missing responses, retrying once", {
       jobId: input.jobId,
-      error: llmResult.error,
+      missingCount: missingQuestions.length,
     });
-    return {};
+
+    // Attempt 2: repair prompt for missing answers
+    const repairPrompt = buildRepairPrompt(
+      input.questions,
+      answers,
+      input.profile,
+      job,
+    );
+    const retryAnswers = await callLlmWithRetry(
+      llm,
+      llmConfig.model,
+      repairPrompt,
+      SCREENING_ANSWERS_REPAIR_PROMPT,
+      input.jobId,
+    );
+
+    // Merge: keep original answers, fill missing from retry
+    const merged: Record<string, string> = { ...answers };
+    for (const question of input.questions) {
+      if (!merged[question] && retryAnswers[question]) {
+        merged[question] = retryAnswers[question];
+      }
+    }
+    answers = merged;
+
+    // Validate again after retry
+    const stillMissing = findMissingAnswers(input.questions, answers);
+    if (stillMissing.length > 0) {
+      throw new ScreeningAnswersValidationError(
+        `Screening answers incomplete after retry: missing ${stillMissing.length} question(s)`,
+        stillMissing,
+      );
+    }
   }
 
-  const answers = llmResult.data.answers ?? {};
+  // Emit streaming chunks
+  if (input.onChunk) {
+    const json = JSON.stringify(answers);
+    for (let i = 0; i < json.length; i += 128) {
+      input.onChunk(json.slice(i, i + 128));
+    }
+  }
+
+  return answers;
+}
+
+async function callLlmWithRetry(
+  llm: InstanceType<typeof LlmService>,
+  model: string,
+  prompt: string,
+  systemPrompt: string,
+  jobId: string,
+): Promise<Record<string, string>> {
+  // Attempt 1
+  let llmResult: Awaited<
+    ReturnType<typeof llm.callJson<{ answers: Record<string, string> }>>
+  >;
+  try {
+    llmResult = await llm.callJson<{ answers: Record<string, string> }>({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+      jsonSchema: SCREENING_ANSWERS_SCHEMA,
+      jobId,
+    });
+  } catch (error) {
+    logger.warn("Screening answer LLM call threw, retrying once", {
+      jobId,
+      error,
+    });
+    // Retry with repair prompt
+    try {
+      const retrySystemPrompt = SCREENING_ANSWERS_REPAIR_PROMPT;
+      const retryResult = await llm.callJson<{ answers: Record<string, string> }>({
+        model,
+        messages: [
+          { role: "system", content: retrySystemPrompt },
+          { role: "user", content: prompt },
+        ],
+        jsonSchema: SCREENING_ANSWERS_SCHEMA,
+        jobId,
+      });
+      if (!retryResult.success) {
+        throw new ScreeningAnswersUnavailableError(
+          `Screening answer generation failed after retry: ${retryResult.error ?? "unknown error"}`,
+          error,
+        );
+      }
+      const rawAnswers = retryResult.data.answers ?? {};
+      const normalized: Record<string, string> = {};
+      for (const [q, a] of Object.entries(rawAnswers)) {
+        normalized[q] = typeof a === "string" ? a : "";
+      }
+      return normalized;
+    } catch (retryError) {
+      if (retryError instanceof ScreeningAnswersUnavailableError) {
+        throw retryError;
+      }
+      throw new ScreeningAnswersUnavailableError(
+        `Screening answer generation failed after retry: ${retryError instanceof Error ? retryError.message : "unknown error"}`,
+        retryError,
+      );
+    }
+  }
+
+  if (!llmResult.success) {
+    // Attempt 2: retry with same prompt
+    const retryResult = await llm.callJson<{ answers: Record<string, string> }>({
+      model,
+      messages: [
+        { role: "system", content: SCREENING_ANSWERS_REPAIR_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      jsonSchema: SCREENING_ANSWERS_SCHEMA,
+      jobId,
+    });
+    if (!retryResult.success) {
+      throw new ScreeningAnswersUnavailableError(
+        `Screening answer generation failed after retry: ${retryResult.error ?? "unknown error"}`,
+      );
+    }
+    const rawAnswers = retryResult.data.answers ?? {};
+    const normalized: Record<string, string> = {};
+    for (const [q, a] of Object.entries(rawAnswers)) {
+      normalized[q] = typeof a === "string" ? a : "";
+    }
+    return normalized;
+  }
+
+  const rawAnswers = llmResult.data.answers ?? {};
   const normalized: Record<string, string> = {};
-  for (const question of input.questions) {
-    const answer = answers[question];
-    normalized[question] = typeof answer === "string" ? answer : "";
+  for (const [q, a] of Object.entries(rawAnswers)) {
+    normalized[q] = typeof a === "string" ? a : "";
   }
   return normalized;
 }
 
-const SCREENING_ANSWERS_SYSTEM_PROMPT = `You are an applicant filling out a job application screening form. You will be given a job description, the candidate's resume profile, and a list of screening questions. Return a JSON object with an "answers" property whose value is a map from each question to a concise, honest, role-specific answer based on the candidate's profile and the job description. Do not invent experience the profile does not support; if the profile does not address a question, say so briefly. Keep each answer to 1-3 sentences.`;
-
-function buildScreeningAnswersPrompt(
+function findMissingAnswers(
   questions: string[],
-  job: { title?: string; employer?: string; jobDescription?: string | null },
+  answers: Record<string, string>,
+): string[] {
+  return questions.filter((q) => !answers[q] || answers[q].length === 0);
+}
+
+function buildRepairPrompt(
+  questions: string[],
+  currentAnswers: Record<string, string>,
   profile: Record<string, unknown>,
+  job: { title?: string; employer?: string; jobDescription?: string | null },
 ): string {
-  const questionsList = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
+  const answered = questions
+    .filter((q) => currentAnswers[q])
+    .map((q) => `${q} → ${currentAnswers[q]}`)
+    .join("\n");
+  const unanswered = questions
+    .filter((q) => !currentAnswers[q])
+    .map((q, i) => `${i + 1}. ${q}`)
+    .join("\n");
+
   return [
     `Job: ${job.title ?? "Unknown"} at ${job.employer ?? "Unknown"}`,
     job.jobDescription
@@ -1424,17 +1632,17 @@ function buildScreeningAnswersPrompt(
     "Candidate profile (JSON):",
     JSON.stringify(profile, null, 2),
     "",
-    "Screening questions:",
-    questionsList,
+    answered ? `Already answered:\n${answered}` : "",
+    "",
+    `Please answer ONLY these remaining questions:\n${unanswered}`,
+    "",
+    "Keep each answer to 1-2 sentences. If you don't know, say 'Not available in profile.'",
     "",
     'Return JSON of the form {"answers": { "<question>": "<answer>", ... }}.',
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
-
-/**
- * Generate a tailored cover letter for the given job and profile using the
- * existing Ghostwriter LLM machinery. Returns the letter body as a string.
- */
 export async function generateCoverLetterForJob(input: {
   jobId: string;
   profile: Record<string, unknown>;
