@@ -3,6 +3,8 @@ import { vi } from "vitest";
 export interface ChromeMock {
   tabs: {
     create: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+    captureVisibleTab: ReturnType<typeof vi.fn>;
     onUpdated: {
       addListener: ReturnType<typeof vi.fn>;
     };
@@ -116,6 +118,17 @@ export function createChromeMock(
   const mock: ChromeMock = {
     tabs: {
       create: vi.fn().mockResolvedValue({ id: 42 }),
+      remove: vi.fn().mockResolvedValue(undefined),
+      captureVisibleTab: vi.fn(
+        (
+          _tabId: number,
+          _options: unknown,
+          callback?: (dataUrl: string) => void,
+        ) => {
+          if (callback) callback("data:image/png;base64,abc");
+          return Promise.resolve("data:image/png;base64,abc");
+        },
+      ),
       onUpdated: { addListener: vi.fn((fn) => tabUpdatedListeners.push(fn)) },
     },
     scripting: { executeScript: vi.fn().mockResolvedValue(undefined) },
@@ -178,5 +191,19 @@ export function fireTabUpdated(
 ): void {
   for (const listener of mock._emitters.tabUpdated) {
     listener(tabId, info, tab);
+  }
+}
+
+export function fireMessage(
+  mock: ChromeMock,
+  message: unknown,
+  sender: { tab?: { id?: number } } = {},
+): void {
+  const addListenerMock = mock.runtime.onMessage.addListener;
+  const calls = addListenerMock.mock.calls as Array<
+    [(msg: unknown, sender: unknown) => void]
+  >;
+  for (const call of calls) {
+    call[0](message, sender);
   }
 }

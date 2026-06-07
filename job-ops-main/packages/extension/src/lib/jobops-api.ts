@@ -169,6 +169,13 @@ export class JobOpsApi {
     });
   }
 
+  reportQueueResult(msg: JobopsResult): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>("/api/applications/queue-result", {
+      method: "POST",
+      body: JSON.stringify(msg),
+    });
+  }
+
   getQueue(limit: number): Promise<QueueResponse> {
     return this.request<QueueResponse>(
       `/api/applications/queue?limit=${limit}`,
