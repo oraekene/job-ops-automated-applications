@@ -799,7 +799,7 @@
     {
       "id": "US-034",
       "title": "Hardening US-008: cover letter quality, streaming, and screening-answer cross-reference",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-008"
       ],
