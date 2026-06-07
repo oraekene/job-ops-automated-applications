@@ -181,4 +181,16 @@ export class JobOpsApi {
       `/api/applications/queue?limit=${limit}`,
     );
   }
+
+  getQueueStatus(): Promise<{
+    counts: {
+      pending: number;
+      submittedToday: number;
+      skippedToday: number;
+      failedToday: number;
+    };
+    lastRunAt: string | null;
+  }> {
+    return this.request("/api/applications/queue/status");
+  }
 }
