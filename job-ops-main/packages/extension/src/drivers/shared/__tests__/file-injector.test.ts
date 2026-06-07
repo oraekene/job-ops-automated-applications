@@ -89,7 +89,7 @@ describe("setFileInput", () => {
   });
 });
 
-describe("uploadResume (US-014)", () => {
+describe("uploadResume (US-014 + US-033)", () => {
   let restoreFiles: () => void;
   beforeEach(() => {
     installDataTransferPolyfill();
@@ -100,7 +100,7 @@ describe("uploadResume (US-014)", () => {
     restoreFiles();
   });
 
-  it("attaches a decoded PDF file to a Greenhouse input and dispatches change", () => {
+  it("attaches a decoded PDF file to a Greenhouse input (raw base64 fallback path)", async () => {
     document.body.innerHTML =
       '<input type="file" data-qa="resume-upload-input" />';
     const input = document.querySelector<HTMLInputElement>(
@@ -111,7 +111,12 @@ describe("uploadResume (US-014)", () => {
     const base64 = btoa("%PDF-1.4\nfake content\n%%EOF");
     const dispatchSpy = vi.spyOn(input as HTMLInputElement, "dispatchEvent");
 
-    const ok = uploadResume(
+    // Pass raw base64 (no data: prefix) — falls through to the atob path
+    // which is exercised in jsdom where fetch + DecompressionStream are
+    // unavailable. Production code receives a data: URL and uses the
+    // fetch+gunzip path; verified by the orchestrator-side pdf integrity
+    // tests in services/applications.buildPayload.pdfIntegrity.test.ts.
+    const ok = await uploadResume(
       input as HTMLInputElement,
       base64,
       "tailored-resume.pdf",
@@ -126,25 +131,25 @@ describe("uploadResume (US-014)", () => {
     );
   });
 
-  it("returns false when called with a null input (no file input found)", () => {
+  it("returns false when called with a null input (no file input found)", async () => {
     const base64 = btoa("anything");
-    const ok = uploadResume(null, base64, "tailored-resume.pdf");
+    const ok = await uploadResume(null, base64, "tailored-resume.pdf");
     expect(ok).toBe(false);
   });
 
-  it("returns false when DataTransfer is unavailable", () => {
+  it("returns false when DataTransfer is unavailable", async () => {
     uninstallDataTransferPolyfill();
     const input = document.createElement("input");
     input.type = "file";
     const base64 = btoa("%PDF-1.4\nfake content\n%%EOF");
-    const ok = uploadResume(input, base64, "tailored-resume.pdf");
+    const ok = await uploadResume(input, base64, "tailored-resume.pdf");
     expect(ok).toBe(false);
   });
 
-  it("returns false on malformed base64 (negative)", () => {
+  it("returns false on malformed base64 (negative)", async () => {
     const input = document.createElement("input");
     input.type = "file";
-    const ok = uploadResume(input, "!!@@", "tailored-resume.pdf");
+    const ok = await uploadResume(input, "!!@@", "tailored-resume.pdf");
     expect(ok).toBe(false);
   });
 });

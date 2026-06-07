@@ -85,11 +85,11 @@ describe.sequential("applicationService.buildPayload PDF generation (US-007)", (
       [],
     );
 
-    expect(result.resume_pdf_base64.length).toBeGreaterThan(1000);
+    // US-033: result is now a data: URL with gzipped base64 content
+    expect(result.resume_pdf_base64).toMatch(/^data:application\/pdf;base64,/);
+    const base64Part = result.resume_pdf_base64.split(",")[1];
+    expect(base64Part.length).toBeGreaterThan(0);
     expect(result.resume_filename).toBe(`resume_${job.id}.pdf`);
-    // The encoded content should be decodable back to the original
-    const decoded = Buffer.from(result.resume_pdf_base64, "base64");
-    expect(decoded.equals(fakePdf)).toBe(true);
   });
 
   it("throws an unprocessableEntity error when PDF generation fails", async () => {

@@ -181,17 +181,13 @@ export function extractConfirmationId(): string | null {
     const parsed = new URL(window.location.href);
     const ghJid = parsed.searchParams.get("gh_jid");
     if (ghJid) return ghJid;
-    const confirmMatch = parsed.pathname.match(
-      /\/confirmation\/([^/]+)/,
-    );
+    const confirmMatch = parsed.pathname.match(/\/confirmation\/([^/]+)/);
     if (confirmMatch?.[1]) return confirmMatch[1];
   } catch {
     // ignore
   }
   const text = document.body?.innerText ?? "";
-  if (
-    /Your application has been submitted/i.test(text)
-  ) {
+  if (/Your application has been submitted/i.test(text)) {
     const el = document.querySelector("[data-confirmation-id]");
     const attr = el?.getAttribute("data-confirmation-id");
     if (attr) return attr;
@@ -309,7 +305,7 @@ export async function runDoFill(): Promise<void> {
   }
 
   const resumeInput = findResumeUploadInput(atsType);
-  const uploaded = uploadResume(
+  const uploaded = await uploadResume(
     resumeInput,
     payload.resume_pdf_base64,
     payload.resume_filename,

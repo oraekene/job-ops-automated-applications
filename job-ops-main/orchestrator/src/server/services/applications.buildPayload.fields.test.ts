@@ -125,7 +125,8 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
     );
     expect(result.cover_letter.length).toBeGreaterThan(0);
     expect(result.screening_answers).toEqual({ "Years of React?": "5 years" });
-    expect(result.resume_pdf_base64).toBe(fakePdfBytes.toString("base64"));
+    // US-033: result is now a data: URL with gzipped base64 content
+    expect(result.resume_pdf_base64).toMatch(/^data:application\/pdf;base64,/);
     expect(result.resume_filename).toBe(`resume_${job.id}.pdf`);
 
     // Persisted application row

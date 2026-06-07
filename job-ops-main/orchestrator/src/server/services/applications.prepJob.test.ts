@@ -21,8 +21,8 @@ vi.mock("./suitability", () => ({
   recomputeAndPersistSuitabilityScore: vi.fn(),
 }));
 
-import { getProfile } from "./profile";
 import { pdfExists } from "./pdf";
+import { getProfile } from "./profile";
 import { getEffectiveSettings } from "./settings";
 import { recomputeAndPersistSuitabilityScore } from "./suitability";
 

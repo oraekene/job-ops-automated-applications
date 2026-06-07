@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { notFound, unprocessableEntity } from "@infra/errors";
+import { gzipSync } from "node:zlib";
+import { AppError, notFound, unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
@@ -419,10 +420,8 @@ async function buildScreeningAnswers(
   if (customQuestions.length === 0) {
     return {};
   }
-  const {
-    ScreeningAnswersUnavailableError,
-    ScreeningAnswersValidationError,
-  } = await import("./ghostwriter");
+  const { ScreeningAnswersUnavailableError, ScreeningAnswersValidationError } =
+    await import("./ghostwriter");
   try {
     const profile = await getProfile();
     const profileRecord =
@@ -468,8 +467,29 @@ async function buildTailoredPdf(
 
   const pdfPath = getPdfPath(jobId);
   const bytes = await readFile(pdfPath);
+
+  // Integrity check: first 5 bytes must be %PDF-
+  const magic = bytes.subarray(0, 5).toString("ascii");
+  if (magic !== "%PDF-") {
+    throw unprocessableEntity("PDF integrity check failed: invalid header");
+  }
+
+  // Size check: reject files larger than 10 MB
+  const fileStats = await stat(pdfPath);
+  const MAX_PDF_BYTES = 10 * 1024 * 1024;
+  if (fileStats.size > MAX_PDF_BYTES) {
+    throw new AppError({
+      status: 413,
+      code: "UNPROCESSABLE_ENTITY",
+      message: "PDF exceeds 10MB limit",
+    });
+  }
+
+  // Compress with gzip before base64-encoding
+  const compressed = gzipSync(bytes, { level: 6 });
+
   return {
-    resume_pdf_base64: bytes.toString("base64"),
+    resume_pdf_base64: `data:application/pdf;base64,${compressed.toString("base64")}`,
     resume_filename: `resume_${jobId}.pdf`,
   };
 }
