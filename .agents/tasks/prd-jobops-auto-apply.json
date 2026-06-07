@@ -437,7 +437,7 @@
     {
       "id": "US-013a",
       "title": "Extension doFill: call buildPayload instead of hardcoded data",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-008"
       ],
@@ -456,7 +456,7 @@
     {
       "id": "US-013b",
       "title": "Extension doFill: populate fields, screening answers, and cover letter into the ATS form",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-013a"
       ],
@@ -473,7 +473,7 @@
     {
       "id": "US-014",
       "title": "Extension doFill: upload the tailored PDF via DataTransfer",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-013"
       ],
@@ -489,7 +489,7 @@
     {
       "id": "US-015a",
       "title": "Extension background: chrome.alarms poll loop with state machine and backoff",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-010"
       ],
@@ -509,7 +509,7 @@
     {
       "id": "US-015b",
       "title": "Extension background: open tab per queue item with jobId param",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-015a"
       ],
@@ -565,7 +565,7 @@
     {
       "id": "US-017",
       "title": "Extension: detect CAPTCHAs, MFA, and unknown ATS as skipped",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-016"
       ],
@@ -581,7 +581,7 @@
     {
       "id": "US-018",
       "title": "Extension popup: add Auto-apply toggle and queue status",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-012"
       ],
@@ -597,7 +597,7 @@
     {
       "id": "US-019",
       "title": "Orchestrator unit tests for prepJob",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-005"
       ],
@@ -612,7 +612,7 @@
     {
       "id": "US-020",
       "title": "Orchestrator unit tests for buildPayload",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-008"
       ],
@@ -780,7 +780,7 @@
     {
       "id": "US-033",
       "title": "Hardening US-007: PDF integrity, size limit, compression, and data: URL",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-007"
       ],
