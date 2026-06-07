@@ -5,13 +5,14 @@ import { gzipSync } from "node:zlib";
 import { AppError, notFound, unprocessableEntity } from "@infra/errors";
 import { logger } from "@infra/logger";
 import type { Job, ResumeProfile } from "@shared/types";
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "../db";
 import { applicationRepository } from "../repositories/applications";
 import {
   findAutoApplicableJobs,
   getJobById,
   getJobByUrl,
+  updateJob,
 } from "../repositories/jobs";
 import { getActiveTenantId } from "../tenancy/context";
 import { generateScreeningAnswersForJob } from "./ghostwriter";
@@ -53,7 +54,12 @@ export interface PrepResult {
 }
 
 export interface PayloadResult {
-  applicationId: string;
+  /**
+   * US-035: `null` because buildPayload no longer creates the application
+   * row. The row is created in `reportQueueResult` when the extension
+   * actually reports the outcome.
+   */
+  applicationId: string | null;
   fields: Record<string, string>;
   cover_letter: string;
   /**
@@ -66,6 +72,8 @@ export interface PayloadResult {
   screening_answers: Record<string, string>;
   resume_pdf_base64: string;
   resume_filename: string;
+  atsType: string;
+  customQuestions: string[];
 }
 
 export interface ConfirmInput {
@@ -149,35 +157,26 @@ export const applicationService = {
       jobId,
       customQuestions,
     );
-    const cover_letter = await buildCoverLetter(
-      jobId,
-      profile,
-      screening_answers,
-    );
+    const cover_letter = await buildCoverLetter(jobId, profile, screening_answers);
     const { resume_pdf_base64, resume_filename } =
       await buildTailoredPdf(jobId);
 
-    const app = applicationRepository.create({
-      jobId,
-      atsType: atsType as "greenhouse" | "lever",
-      status: "preparing",
-    });
-
-    applicationRepository.update(app.id, {
-      status: "ready_for_review",
-      customQuestions: JSON.stringify(customQuestions),
-      fieldPayload: JSON.stringify(fields),
-      screeningAnswers: JSON.stringify(screening_answers),
-    });
+    // US-035: do NOT create the application row here. Row creation is
+    // deferred to `reportQueueResult` (called by the extension after it
+    // actually fills and submits the form). This avoids ghost rows for
+    // crashed extensions and lets us set the final status atomically
+    // with the jobs.lastApplicationId / autoApplicable pointer.
 
     return {
-      applicationId: app.id,
+      applicationId: null,
       fields,
       cover_letter,
       cover_letter_stream: null,
       screening_answers,
       resume_pdf_base64,
       resume_filename,
+      atsType,
+      customQuestions,
     };
   },
 
@@ -212,11 +211,17 @@ export const applicationService = {
 
   async reportQueueResult(input: QueueResultInput) {
     const job = await getJobById(input.jobId);
-    if (!job) throw notFound("Job not found");
+    if (!job) throw notFound(`Job ${input.jobId} not found`);
 
-    const existing = applicationRepository.findByJobId(input.jobId);
     const status = input.outcome;
 
+    // US-035: create the application row here (not in buildPayload). Reuse
+    // any existing row to keep the call idempotent (e.g. extension retries
+    // on a flaky network or reports a later failure after an earlier skip).
+    // Legacy `ready_for_review` rows from older builds are also picked up
+    // here; `cleanupStalePayloads` marks ones older than 1h as skipped
+    // even if the extension never reports back.
+    const existing = applicationRepository.findByJobId(input.jobId);
     const app =
       existing ??
       applicationRepository.create({
@@ -233,6 +238,7 @@ export const applicationService = {
       fieldPayload?: string | null;
       screeningAnswers?: string | null;
       screenshotPath?: string | null;
+      customQuestions?: string | null;
     } = {
       status,
       errorMessage:
@@ -258,6 +264,21 @@ export const applicationService = {
     }
 
     applicationRepository.update(app.id, update);
+
+    // US-035: point the job at the new application and remove it from
+    // the auto-apply pool so the next queue poll does not re-dispatch it.
+    try {
+      await updateJob(input.jobId, {
+        lastApplicationId: app.id,
+        autoApplicable: false,
+      });
+    } catch (error) {
+      logger.warn("reportQueueResult: failed to update job pointer", {
+        jobId: input.jobId,
+        applicationId: app.id,
+        error,
+      });
+    }
 
     logger.info("Queue result reported", {
       jobId: input.jobId,
@@ -740,4 +761,42 @@ async function saveScreenshot(
   const buffer = Buffer.from(base64, "base64");
   await writeFile(filePath, buffer);
   return filePath;
+}
+
+/**
+ * US-035: how old a `ready_for_review` application row must be (in
+ * milliseconds) before `cleanupStalePayloads` marks it as skipped.
+ * Defensive: under the US-035 model, buildPayload no longer creates
+ * rows, so this cleanup is for rows created by older builds and for
+ * rows created by other code paths.
+ */
+export const STALE_PAYLOAD_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * US-035: Mark any application row with `status = 'ready_for_review'`
+ * and `updatedAt < now - STALE_PAYLOAD_MAX_AGE_MS` as
+ * `status: 'skipped', errorMessage: 'stale payload'`. Returns the
+ * number of rows that were marked.
+ *
+ * Safe to call repeatedly; idempotent. Safe to call on an empty DB.
+ */
+export function cleanupStalePayloads(): number {
+  const cutoff = new Date(Date.now() - STALE_PAYLOAD_MAX_AGE_MS).toISOString();
+  const tenantId = getActiveTenantId();
+  const updated = db
+    .update(schema.applications)
+    .set({
+      status: "skipped",
+      errorMessage: "stale payload",
+      updatedAt: new Date().toISOString(),
+    })
+    .where(
+      and(
+        eq(schema.applications.tenantId, tenantId),
+        eq(schema.applications.status, "ready_for_review"),
+        lt(schema.applications.updatedAt, cutoff),
+      ),
+    )
+    .run();
+  return updated.changes;
 }

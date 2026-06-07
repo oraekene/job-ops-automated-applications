@@ -133,21 +133,12 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
     expect(result.resume_pdf_base64).toMatch(/^data:application\/pdf;base64,/);
     expect(result.resume_filename).toBe(`resume_${job.id}.pdf`);
 
-    // Persisted application row
+    // US-035: buildPayload no longer creates the application row. The row
+    // is created in `reportQueueResult` when the extension reports the
+    // outcome.
+    expect(result.applicationId).toBeNull();
     const persisted = applicationRepository.findByJobId(job.id);
-    expect(persisted).not.toBeNull();
-    expect(persisted.status).toBe("ready_for_review");
-    expect(JSON.parse(persisted.fieldPayload)).toEqual(
-      expect.objectContaining({
-        first_name: "Ifeanyi",
-        last_name: "Orae",
-        email: "ifeanyi@example.com",
-      }),
-    );
-    expect(JSON.parse(persisted.screeningAnswers)).toEqual({
-      "Years of React?": "5 years",
-    });
-    expect(JSON.parse(persisted.customQuestions)).toEqual(["Years of React?"]);
+    expect(persisted).toBeUndefined();
   });
 
   it("throws notFound (404) when the profile is missing so the extension surfaces 'Complete onboarding first'", async () => {

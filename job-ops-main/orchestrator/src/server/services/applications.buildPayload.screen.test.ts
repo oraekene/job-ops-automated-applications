@@ -22,6 +22,14 @@ vi.mock("./ghostwriter", () => ({
       super(message);
     }
   },
+  CoverLetterValidationError: class CoverLetterValidationError extends Error {
+    name = "CoverLetterValidationError" as const;
+    reason: string;
+    constructor(message: string, reason: string) {
+      super(message);
+      this.reason = reason;
+    }
+  },
 }));
 
 vi.mock("./pdf", () => ({

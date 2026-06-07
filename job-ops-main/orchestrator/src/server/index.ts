@@ -20,8 +20,10 @@ import { initializeDemoModeServices } from "./services/demo-mode";
 import { applyStoredEnvOverrides } from "./services/envSettings";
 import { initializeHistoricalServerEventReplaySafely } from "./services/historical-product-analytics";
 import { initialize as initializeVisaSponsors } from "./services/visa-sponsors/index";
+import { cleanupStalePayloads } from "./services/applications";
 
 const AUTH_SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const STALE_PAYLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 async function cleanupAuthSessions(trigger: "startup" | "interval") {
   try {
@@ -147,6 +149,36 @@ async function startServer() {
       await initializeDemoModeServices();
     } catch (error) {
       logger.warn("Failed to initialize demo mode services", {
+        error: sanitizeUnknown(error),
+      });
+    }
+
+    // US-035: mark any application rows stuck in `ready_for_review` for
+    // more than 1 hour as skipped, so crashed extensions don't leave
+    // ghost rows in the queue view.
+    try {
+      const skipped = cleanupStalePayloads();
+      if (skipped > 0) {
+        logger.info("Stale payload cleanup on startup marked rows", {
+          count: skipped,
+        });
+      }
+      setInterval(() => {
+        try {
+          const n = cleanupStalePayloads();
+          if (n > 0) {
+            logger.info("Stale payload cleanup interval marked rows", {
+              count: n,
+            });
+          }
+        } catch (error) {
+          logger.warn("Stale payload cleanup interval failed", {
+            error: sanitizeUnknown(error),
+          });
+        }
+      }, STALE_PAYLOAD_CLEANUP_INTERVAL_MS);
+    } catch (error) {
+      logger.warn("Failed to initialize stale payload cleanup", {
         error: sanitizeUnknown(error),
       });
     }

@@ -32,7 +32,12 @@ export interface PrepResponse {
 }
 
 export interface PayloadResponse {
-  applicationId: string;
+  /**
+   * US-035: `null` because buildPayload no longer creates the application
+   * row. The row is created in `reportQueueResult` when the extension
+   * actually reports the outcome.
+   */
+  applicationId: string | null;
   fields: Record<string, string>;
   cover_letter: string;
   /**

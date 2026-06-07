@@ -323,6 +323,9 @@ export interface CreateJobInput {
   companyReviewsCount?: number;
   vacancyCount?: number;
   workFromHomeType?: string;
+
+  // Auto-application bookkeeping (US-035)
+  autoApplicable?: boolean;
 }
 
 export interface ManualJobDraft {
@@ -382,6 +385,8 @@ export interface UpdateJobInput {
   appliedAt?: string;
   sponsorMatchScore?: number;
   sponsorMatchNames?: string;
+  autoApplicable?: boolean;
+  lastApplicationId?: string | null;
 }
 
 export interface CreateJobNoteInput {
