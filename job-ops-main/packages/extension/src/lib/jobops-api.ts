@@ -35,6 +35,11 @@ export interface PayloadResponse {
   applicationId: string;
   fields: Record<string, string>;
   cover_letter: string;
+  /**
+   * US-034: informational stream of the cover letter text emitted during
+   * generation. Currently always `null`; consumers use `cover_letter`.
+   */
+  cover_letter_stream: ReadableStream<string> | null;
   screening_answers: Record<string, string>;
   resume_pdf_base64: string;
   resume_filename: string;

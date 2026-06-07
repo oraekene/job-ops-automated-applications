@@ -14,10 +14,7 @@ import {
   getJobByUrl,
 } from "../repositories/jobs";
 import { getActiveTenantId } from "../tenancy/context";
-import {
-  generateCoverLetterForJob,
-  generateScreeningAnswersForJob,
-} from "./ghostwriter";
+import { generateScreeningAnswersForJob } from "./ghostwriter";
 import { generatePdf, getPdfPath, pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { mapProfileToPrepProfile } from "./profileNormalize";
@@ -59,6 +56,13 @@ export interface PayloadResult {
   applicationId: string;
   fields: Record<string, string>;
   cover_letter: string;
+  /**
+   * US-034: informational stream of the cover letter text emitted as it
+   * was generated. Currently always `null` (the consumer can read the
+   * final string from `cover_letter`); reserved for future real LLM
+   * streaming integration.
+   */
+  cover_letter_stream: ReadableStream<string> | null;
   screening_answers: Record<string, string>;
   resume_pdf_base64: string;
   resume_filename: string;
@@ -139,10 +143,16 @@ export const applicationService = {
   ): Promise<PayloadResult> {
     const profile = await loadProfileOrThrow(jobId);
     const fields = await buildPayloadFields(profile);
-    const cover_letter = await buildCoverLetter(jobId, profile);
+    // US-034: generate screening answers first so the cover letter can be
+    // cross-referenced against them (no contradictions on duration claims).
     const screening_answers = await buildScreeningAnswers(
       jobId,
       customQuestions,
+    );
+    const cover_letter = await buildCoverLetter(
+      jobId,
+      profile,
+      screening_answers,
     );
     const { resume_pdf_base64, resume_filename } =
       await buildTailoredPdf(jobId);
@@ -164,6 +174,7 @@ export const applicationService = {
       applicationId: app.id,
       fields,
       cover_letter,
+      cover_letter_stream: null,
       screening_answers,
       resume_pdf_base64,
       resume_filename,
@@ -532,22 +543,40 @@ async function buildPayloadFields(
 async function buildCoverLetter(
   jobId: string,
   profile: ResumeProfile,
+  screeningAnswers: Record<string, string>,
 ): Promise<string> {
   const settings = await getEffectiveSettings();
   const profileRecord = profile as unknown as Record<string, unknown>;
+  const { CoverLetterValidationError, generateCoverLetterForJob } =
+    await import("./ghostwriter");
   try {
     const letter = await generateCoverLetterForJob({
       jobId,
       profile: profileRecord,
+      screeningAnswers,
     });
     if (letter && letter.trim().length > 0) {
       return letter;
     }
   } catch (error) {
-    logger.warn("buildPayload: Ghostwriter cover letter failed, falling back", {
-      jobId,
-      error,
-    });
+    if (error instanceof CoverLetterValidationError) {
+      logger.warn(
+        "buildPayload: cover letter failed validation, falling back to default",
+        {
+          jobId,
+          reason: error.reason,
+          message: error.message,
+        },
+      );
+    } else {
+      logger.warn(
+        "buildPayload: Ghostwriter cover letter failed, falling back",
+        {
+          jobId,
+          error,
+        },
+      );
+    }
   }
   return settings.autoApplicationDefaultCoverLetter?.value ?? "";
 }

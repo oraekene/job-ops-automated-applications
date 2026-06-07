@@ -1340,9 +1340,12 @@ const COVER_LETTER_SCHEMA: JsonSchemaDefinition = {
   schema: {
     type: "object",
     properties: {
-      letter: { type: "string" },
+      intro: { type: "string" },
+      body: { type: "string" },
+      outro: { type: "string" },
+      fullText: { type: "string" },
     },
-    required: ["letter"],
+    required: ["intro", "body", "outro", "fullText"],
     additionalProperties: false,
   },
 };
@@ -1398,6 +1401,26 @@ export class ScreeningAnswersValidationError extends Error {
   ) {
     super(message);
     this.name = "ScreeningAnswersValidationError";
+  }
+}
+
+/**
+ * Error thrown when the cover letter fails length validation (must be in
+ * [100, 5000] chars) after a single retry with a length-correcting prompt.
+ * The caller (buildPayload) catches this and falls back to the configured
+ * `autoApplicationDefaultCoverLetter` setting.
+ */
+export class CoverLetterValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly reason:
+      | "too_short"
+      | "too_long"
+      | "contradiction"
+      | "invalid",
+  ) {
+    super(message);
+    this.name = "CoverLetterValidationError";
   }
 }
 
@@ -1537,7 +1560,9 @@ async function callLlmWithRetry(
     // Retry with repair prompt
     try {
       const retrySystemPrompt = SCREENING_ANSWERS_REPAIR_PROMPT;
-      const retryResult = await llm.callJson<{ answers: Record<string, string> }>({
+      const retryResult = await llm.callJson<{
+        answers: Record<string, string>;
+      }>({
         model,
         messages: [
           { role: "system", content: retrySystemPrompt },
@@ -1571,15 +1596,17 @@ async function callLlmWithRetry(
 
   if (!llmResult.success) {
     // Attempt 2: retry with same prompt
-    const retryResult = await llm.callJson<{ answers: Record<string, string> }>({
-      model,
-      messages: [
-        { role: "system", content: SCREENING_ANSWERS_REPAIR_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      jsonSchema: SCREENING_ANSWERS_SCHEMA,
-      jobId,
-    });
+    const retryResult = await llm.callJson<{ answers: Record<string, string> }>(
+      {
+        model,
+        messages: [
+          { role: "system", content: SCREENING_ANSWERS_REPAIR_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        jsonSchema: SCREENING_ANSWERS_SCHEMA,
+        jobId,
+      },
+    );
     if (!retryResult.success) {
       throw new ScreeningAnswersUnavailableError(
         `Screening answer generation failed after retry: ${retryResult.error ?? "unknown error"}`,
@@ -1646,6 +1673,8 @@ function buildRepairPrompt(
 export async function generateCoverLetterForJob(input: {
   jobId: string;
   profile: Record<string, unknown>;
+  screeningAnswers?: Record<string, string>;
+  onChunk?: (chunk: string) => void;
 }): Promise<string> {
   const job = await jobsRepo.getJobById(input.jobId);
   if (!job) {
@@ -1653,7 +1682,11 @@ export async function generateCoverLetterForJob(input: {
   }
 
   const llmConfig = await resolveLlmRuntimeSettings();
-  const prompt = buildCoverLetterPrompt(job, input.profile);
+  const prompt = buildCoverLetterPrompt(
+    job,
+    input.profile,
+    input.screeningAnswers,
+  );
 
   const llm = new LlmService({
     provider: llmConfig.provider,
@@ -1661,34 +1694,247 @@ export async function generateCoverLetterForJob(input: {
     apiKey: llmConfig.apiKey,
   });
 
-  const llmResult = await llm.callJson<{ letter: string }>({
-    model: llmConfig.model,
-    messages: [
-      { role: "system", content: COVER_LETTER_SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    jsonSchema: COVER_LETTER_SCHEMA,
-    jobId: input.jobId,
-  });
+  // Attempt 1: original prompt
+  let parsed: CoverLetterStructured | null = await callCoverLetterLlm(
+    llm,
+    llmConfig.model,
+    COVER_LETTER_SYSTEM_PROMPT,
+    prompt,
+    input.jobId,
+  );
 
-  if (!llmResult.success) {
-    throw upstreamError(
-      `Cover letter generation failed: ${llmResult.error ?? "unknown error"}`,
+  // Validate: length and contradictions
+  let validation: CoverLetterValidationFailure | null = parsed
+    ? validateCoverLetter(parsed, input.screeningAnswers)
+    : {
+        reason: "invalid" as const,
+        message: "LLM returned no structured output",
+      };
+
+  if (validation) {
+    logger.info("Cover letter failed validation, retrying once", {
+      jobId: input.jobId,
+      reason: validation.reason,
+      message: validation.message,
+    });
+
+    // Attempt 2: repair prompt targeted at the specific failure
+    const repairSystemPrompt = buildCoverLetterRepairSystemPrompt(
+      validation.reason,
+    );
+    const repairUserPrompt = `${prompt}\n\n---\n\nPrevious attempt failed validation: ${validation.message}\n\n${buildCoverLetterRepairGuidance(validation.reason, input.screeningAnswers)}`;
+
+    parsed = await callCoverLetterLlm(
+      llm,
+      llmConfig.model,
+      repairSystemPrompt,
+      repairUserPrompt,
+      input.jobId,
+    );
+
+    validation = parsed
+      ? validateCoverLetter(parsed, input.screeningAnswers)
+      : {
+          reason: "invalid" as const,
+          message: "Repair attempt returned no structured output",
+        };
+  }
+
+  if (validation || !parsed) {
+    throw new CoverLetterValidationError(
+      validation?.message ?? "Cover letter validation failed",
+      validation?.reason ?? "invalid",
     );
   }
 
-  return typeof llmResult.data.letter === "string"
-    ? llmResult.data.letter.trim()
-    : "";
+  const fullText = parsed.fullText.trim();
+
+  // Emit streaming chunks (informational; consumers can also use the final string)
+  if (input.onChunk) {
+    for (let i = 0; i < fullText.length; i += 128) {
+      input.onChunk(fullText.slice(i, i + 128));
+    }
+  }
+
+  return fullText;
 }
 
-const COVER_LETTER_SYSTEM_PROMPT = `You are writing a concise, role-specific cover letter for a job application. You will be given a job description and the candidate's resume profile. Write a 3-4 paragraph letter that connects the candidate's most relevant experience to the role, names the company, and ends with a clear call to action. Do not invent experience the profile does not support. Keep the tone professional and warm. Return JSON of the form {"letter": "<full letter body>"}.`;
+type CoverLetterStructured = {
+  intro: string;
+  body: string;
+  outro: string;
+  fullText: string;
+};
+
+type CoverLetterValidationReason =
+  | "too_short"
+  | "too_long"
+  | "contradiction"
+  | "invalid";
+
+type CoverLetterValidationFailure = {
+  reason: CoverLetterValidationReason;
+  message: string;
+};
+
+const COVER_LETTER_MIN_CHARS = 100;
+const COVER_LETTER_MAX_CHARS = 5000;
+
+async function callCoverLetterLlm(
+  llm: InstanceType<typeof LlmService>,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  jobId: string,
+): Promise<CoverLetterStructured | null> {
+  const result = await llm.callJson<CoverLetterStructured>({
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    jsonSchema: COVER_LETTER_SCHEMA,
+    jobId,
+  });
+  if (!result.success) {
+    logger.warn("Cover letter LLM call returned failure", {
+      jobId,
+      error: result.error,
+    });
+    return null;
+  }
+  const data = result.data;
+  if (
+    !data ||
+    typeof data.intro !== "string" ||
+    typeof data.body !== "string" ||
+    typeof data.outro !== "string" ||
+    typeof data.fullText !== "string"
+  ) {
+    return null;
+  }
+  return data;
+}
+
+function validateCoverLetter(
+  parsed: CoverLetterStructured,
+  screeningAnswers: Record<string, string> | undefined,
+): CoverLetterValidationFailure | null {
+  const text = (parsed.fullText ?? "").trim();
+  if (text.length < COVER_LETTER_MIN_CHARS) {
+    return {
+      reason: "too_short",
+      message: `Cover letter length ${text.length} is below minimum ${COVER_LETTER_MIN_CHARS} chars`,
+    };
+  }
+  if (text.length > COVER_LETTER_MAX_CHARS) {
+    return {
+      reason: "too_long",
+      message: `Cover letter length ${text.length} exceeds maximum ${COVER_LETTER_MAX_CHARS} chars`,
+    };
+  }
+  // Cross-reference: if screening answers mention numeric/duration claims,
+  // the cover letter should not contradict them. We extract simple "N years"
+  // / "N months" patterns from each side and check for mismatches.
+  if (screeningAnswers) {
+    const contradiction = findDurationContradiction(text, screeningAnswers);
+    if (contradiction) {
+      return {
+        reason: "contradiction",
+        message: `Cover letter contradicts screening answer: ${contradiction}`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract "<N> (year|years|month|months|week|weeks|day|days)" claims from
+ * text. Returns a list of "<n> <unit>" strings normalized to lowercase.
+ */
+function extractDurationClaims(text: string): string[] {
+  const re = /(\d+)\s+(year|years|month|months|week|weeks|day|days)\b/gi;
+  const out: string[] = [];
+  for (const m of text.matchAll(re)) {
+    out.push(`${m[1]} ${m[2].toLowerCase()}`);
+  }
+  return out;
+}
+
+/**
+ * Compare duration claims in the cover letter with those in the screening
+ * answers. Returns a human-readable description of the first contradiction,
+ * or null if no contradiction is detected.
+ */
+function findDurationContradiction(
+  coverLetter: string,
+  screeningAnswers: Record<string, string>,
+): string | null {
+  const coverClaims = new Set(extractDurationClaims(coverLetter));
+  for (const answer of Object.values(screeningAnswers)) {
+    const answerClaims = extractDurationClaims(answer);
+    for (const claim of answerClaims) {
+      // Cover letter should either repeat the same claim or not mention
+      // the duration at all. If it does mention a duration, it must match.
+      if (!coverClaims.has(claim)) {
+        // Check whether the cover letter mentions a different number of
+        // the same unit (e.g., screening says "5 years" and cover letter
+        // says "3 years").
+        const [, unit] = claim.split(" ");
+        for (const c of coverClaims) {
+          const [cN, cUnit] = c.split(" ");
+          if (cUnit === unit && cN !== claim.split(" ")[0]) {
+            return `screening says "${claim}" but cover letter says "${c}"`;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function buildCoverLetterRepairSystemPrompt(
+  reason: CoverLetterValidationReason,
+): string {
+  if (reason === "too_short") {
+    return `${COVER_LETTER_SYSTEM_PROMPT}\n\nIMPORTANT: The previous version was too short. The fullText MUST be at least ${COVER_LETTER_MIN_CHARS} characters. Add more specific examples from the candidate's profile.`;
+  }
+  if (reason === "too_long") {
+    return `${COVER_LETTER_SYSTEM_PROMPT}\n\nIMPORTANT: The previous version was too long. The fullText MUST be at most ${COVER_LETTER_MAX_CHARS} characters. Trim filler and keep only the strongest 2-3 specific examples.`;
+  }
+  if (reason === "contradiction") {
+    return `${COVER_LETTER_SYSTEM_PROMPT}\n\nIMPORTANT: The previous version contradicted the candidate's screening answers on duration. Use the EXACT same duration claims as the screening answers; do not invent different numbers.`;
+  }
+  return COVER_LETTER_SYSTEM_PROMPT;
+}
+
+function buildCoverLetterRepairGuidance(
+  reason: CoverLetterValidationReason,
+  screeningAnswers: Record<string, string> | undefined,
+): string {
+  if (reason === "contradiction" && screeningAnswers) {
+    const claims: string[] = [];
+    for (const a of Object.values(screeningAnswers)) {
+      claims.push(...extractDurationClaims(a));
+    }
+    if (claims.length > 0) {
+      return `Use these duration claims exactly: ${claims.join("; ")}.`;
+    }
+  }
+  return `Re-write to satisfy: ${reason}.`;
+}
+
+const COVER_LETTER_SYSTEM_PROMPT = `You are writing a concise, role-specific cover letter for a job application. You will be given a job description, the candidate's resume profile, and (when available) the candidate's screening answers. Write a 3-paragraph letter that connects the candidate's most relevant experience to the role, names the company, and ends with a clear call to action. Do not invent experience the profile does not support. Use the EXACT same duration claims (e.g. "5 years of React") that appear in the screening answers. Keep the tone professional and warm.
+
+Return JSON of the form:
+{"intro": "<greeting + 1-2 sentence role-fit summary>", "body": "<1-2 paragraphs of specific experience matching the role's requirements>", "outro": "<1-2 sentence call to action>", "fullText": "<intro + body + outro concatenated, separated by blank lines>"}.`;
 
 function buildCoverLetterPrompt(
   job: { title?: string; employer?: string; jobDescription?: string | null },
   profile: Record<string, unknown>,
+  screeningAnswers?: Record<string, string>,
 ): string {
-  return [
+  const sections: string[] = [
     `Job: ${job.title ?? "Unknown"} at ${job.employer ?? "Unknown"}`,
     job.jobDescription
       ? `Job description:\n${job.jobDescription}`
@@ -1696,5 +1942,13 @@ function buildCoverLetterPrompt(
     "",
     "Candidate profile (JSON):",
     JSON.stringify(profile, null, 2),
-  ].join("\n");
+  ];
+  if (screeningAnswers && Object.keys(screeningAnswers).length > 0) {
+    sections.push(
+      "",
+      "Screening answers the candidate will submit for this job (the cover letter MUST be consistent with these answers):",
+      JSON.stringify(screeningAnswers, null, 2),
+    );
+  }
+  return sections.join("\n");
 }

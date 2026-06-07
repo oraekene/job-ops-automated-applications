@@ -10,6 +10,10 @@ vi.mock("./profile", () => ({
 vi.mock("./ghostwriter", () => ({
   generateScreeningAnswersForJob: vi.fn(),
   generateCoverLetterForJob: vi.fn(),
+  CoverLetterValidationError: class CoverLetterValidationError extends Error {
+    name = "CoverLetterValidationError" as const;
+    reason = "invalid" as const;
+  },
 }));
 
 vi.mock("./pdf", () => ({

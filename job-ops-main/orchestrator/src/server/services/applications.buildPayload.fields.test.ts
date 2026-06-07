@@ -16,6 +16,10 @@ vi.mock("./ghostwriter", () => ({
   ScreeningAnswersValidationError: class ScreeningAnswersValidationError extends Error {
     name = "ScreeningAnswersValidationError" as const;
   },
+  CoverLetterValidationError: class CoverLetterValidationError extends Error {
+    name = "CoverLetterValidationError" as const;
+    reason = "invalid" as const;
+  },
 }));
 
 vi.mock("./pdf", () => ({
