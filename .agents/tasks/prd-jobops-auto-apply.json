@@ -627,7 +627,7 @@
     {
       "id": "US-021a",
       "title": "Extension vitest: background service worker",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-015a",
         "US-015b",
@@ -817,7 +817,7 @@
     {
       "id": "US-035",
       "title": "Hardening US-008: defer application row creation, add stale-payload cleanup",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-008"
       ],
@@ -835,7 +835,7 @@
     {
       "id": "US-036",
       "title": "Hardening: settings type drift guard",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-008"
       ],
