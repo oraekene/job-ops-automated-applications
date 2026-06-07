@@ -743,7 +743,7 @@
     {
       "id": "US-031",
       "title": "Hardening US-005: PDF staleness threshold and fingerprint cross-check",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-005"
       ],
@@ -762,7 +762,7 @@
     {
       "id": "US-032",
       "title": "Hardening US-006: screening answer robustness, streaming, and validation",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-006"
       ],
