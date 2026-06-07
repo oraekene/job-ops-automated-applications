@@ -2,6 +2,7 @@ import { detectAtsByUrl } from "./drivers/ats-detector";
 import { fillGreenhouseForm } from "./drivers/greenhouse";
 import { fillLeverForm } from "./drivers/lever";
 import { uploadResume } from "./drivers/shared/file-injector";
+import { detectBlocker } from "./lib/detect-blocker";
 import type { JobopsResult, PayloadResponse } from "./lib/jobops-api";
 import { ApiError, JobOpsApi, NetworkError } from "./lib/jobops-api";
 
@@ -612,6 +613,19 @@ async function main() {
   ensurePanelInjected();
 
   await waitForPageStability();
+
+  const blocker = detectBlocker();
+  if (blocker.blocked) {
+    const jobId = extractJobIdFromUrl(url);
+    reportResult(jobId, "skipped", { reason: blocker.reason });
+    updatePanel(
+      `<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">${escapeHtml(blocker.reason ?? "Blocked")} \u2014 skipping.</div>`,
+      "Skip",
+      "#ffebee",
+      "#c62828",
+    );
+    return;
+  }
 
   const FORCE_PANEL_TIMEOUT = 5000;
   let panelShown = false;
