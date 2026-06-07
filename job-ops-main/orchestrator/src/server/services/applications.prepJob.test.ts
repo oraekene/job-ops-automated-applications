@@ -3,6 +3,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./profile", () => ({
+  getProfile: vi.fn(),
+}));
+
+vi.mock("./pdf", () => ({
+  generatePdf: vi.fn(),
+  getPdfPath: vi.fn(),
+  pdfExists: vi.fn(),
+}));
+
+vi.mock("./settings", () => ({
+  getEffectiveSettings: vi.fn(),
+}));
+
+vi.mock("./suitability", () => ({
+  recomputeAndPersistSuitabilityScore: vi.fn(),
+}));
+
+import { getProfile } from "./profile";
+import { pdfExists } from "./pdf";
+import { getEffectiveSettings } from "./settings";
+import { recomputeAndPersistSuitabilityScore } from "./suitability";
+
 describe.sequential("applicationService.prepJob (US-002)", () => {
   let tempDir: string;
   let jobsRepo: any;
@@ -18,6 +41,16 @@ describe.sequential("applicationService.prepJob (US-002)", () => {
 
     jobsRepo = await import("../repositories/jobs");
     applicationService = (await import("./applications")).applicationService;
+
+    vi.mocked(getEffectiveSettings).mockResolvedValue({
+      autoApplicationEnabled: { value: true, default: true, override: null },
+      autoApplicationPdfMaxAgeDays: {
+        value: 30,
+        default: 30,
+        override: null,
+      },
+    } as any);
+    vi.mocked(pdfExists).mockResolvedValue(false);
   });
 
   afterEach(async () => {
@@ -117,5 +150,160 @@ describe.sequential("applicationService.prepJob (US-002)", () => {
     expect(result.exists).toBe(true);
     expect(result.job?.suitabilityScore).toBeCloseTo(0.87);
     expect(result.job?.status).toBe("discovered");
+  });
+
+  it("returns profile:null when getProfile throws (onboarding not complete)", async () => {
+    const url = "https://boards.greenhouse.io/acme/jobs/999";
+    await jobsRepo.createJob({
+      source: "greenhouse",
+      sourceJobId: "999",
+      title: "DevOps",
+      employer: "Acme",
+      jobUrl: url,
+    });
+    vi.mocked(getProfile).mockRejectedValue(
+      new Error(
+        "Base resume not configured. Please select a base resume from your RxResume account in Settings.",
+      ),
+    );
+
+    const result = await applicationService.prepJob(url, "greenhouse");
+
+    expect(result.exists).toBe(true);
+    expect(result.profile).toBeNull();
+  });
+
+  it("sets hasTailoredPdf:true and pdfStale:false when PDF exists and is fresh", async () => {
+    const url = "https://boards.greenhouse.io/acme/jobs/501";
+    const job = await jobsRepo.createJob({
+      source: "greenhouse",
+      sourceJobId: "501",
+      title: "Backend Dev",
+      employer: "Acme",
+      jobUrl: url,
+    });
+
+    // Patch the job row to have a recent pdfGeneratedAt and matching fingerprint
+    const { db, schema } = await import("../db/index");
+    const { eq } = await import("drizzle-orm");
+    const inserted = await db
+      .select()
+      .from(schema.jobs)
+      .where(eq(schema.jobs.id, job.id))
+      .get();
+    if (!inserted) throw new Error("Expected job row");
+    db.update(schema.jobs)
+      .set({
+        pdfGeneratedAt: new Date().toISOString(),
+        pdfFingerprint: null,
+      })
+      .where(eq(schema.jobs.id, job.id))
+      .run();
+
+    vi.mocked(pdfExists).mockResolvedValue(true);
+    vi.mocked(getProfile).mockResolvedValue({
+      basics: { name: "Test User", email: "test@example.com" },
+    } as any);
+
+    const result = await applicationService.prepJob(url, "greenhouse");
+
+    expect(result.exists).toBe(true);
+    expect(result.hasTailoredPdf).toBe(true);
+    expect(result.pdfStale).toBe(false);
+  });
+
+  it("sets pdfStale:true and pdfStaleReason:'fingerprint' when profile changed since PDF was generated", async () => {
+    const url = "https://boards.greenhouse.io/acme/jobs/502";
+    const job = await jobsRepo.createJob({
+      source: "greenhouse",
+      sourceJobId: "502",
+      title: "Frontend Dev",
+      employer: "Acme",
+      jobUrl: url,
+    });
+
+    // Patch job: pdfGeneratedAt is recent but pdfFingerprint is an old value
+    const { db, schema } = await import("../db/index");
+    const { eq } = await import("drizzle-orm");
+    const inserted = await db
+      .select()
+      .from(schema.jobs)
+      .where(eq(schema.jobs.id, job.id))
+      .get();
+    if (!inserted) throw new Error("Expected job row");
+    db.update(schema.jobs)
+      .set({
+        pdfGeneratedAt: new Date().toISOString(),
+        pdfFingerprint: "old_fingerprint123",
+      })
+      .where(eq(schema.jobs.id, job.id))
+      .run();
+
+    vi.mocked(pdfExists).mockResolvedValue(true);
+    vi.mocked(getProfile).mockResolvedValue({
+      basics: { name: "Test User", email: "test@example.com" },
+    } as any);
+
+    const result = await applicationService.prepJob(url, "greenhouse");
+
+    expect(result.exists).toBe(true);
+    expect(result.hasTailoredPdf).toBe(true);
+    expect(result.pdfStale).toBe(true);
+    expect(result.pdfStaleReason).toBe("fingerprint");
+  });
+
+  it("throws notFound (404) when job URL not in DB and profile is missing", async () => {
+    vi.mocked(getProfile).mockRejectedValue(
+      new Error("Base resume not configured"),
+    );
+
+    const result = await applicationService.prepJob(
+      "https://boards.greenhouse.io/acme/jobs/missing",
+      "greenhouse",
+    );
+
+    expect(result.exists).toBe(false);
+    expect(result.profile).toBeUndefined();
+  });
+
+  it("sets pdfStale:true and pdfStaleReason:'age' when PDF is older than maxPdfAgeDays", async () => {
+    const url = "https://boards.greenhouse.io/acme/jobs/503";
+    const job = await jobsRepo.createJob({
+      source: "greenhouse",
+      sourceJobId: "503",
+      title: "SRE",
+      employer: "Acme",
+      jobUrl: url,
+    });
+
+    // Patch job: pdfGeneratedAt is 60 days ago
+    const { db, schema } = await import("../db/index");
+    const { eq } = await import("drizzle-orm");
+    const inserted = await db
+      .select()
+      .from(schema.jobs)
+      .where(eq(schema.jobs.id, job.id))
+      .get();
+    if (!inserted) throw new Error("Expected job row");
+    const oldDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    db.update(schema.jobs)
+      .set({
+        pdfGeneratedAt: oldDate.toISOString(),
+        pdfFingerprint: null,
+      })
+      .where(eq(schema.jobs.id, job.id))
+      .run();
+
+    vi.mocked(pdfExists).mockResolvedValue(true);
+    vi.mocked(getProfile).mockResolvedValue({
+      basics: { name: "Test User", email: "test@example.com" },
+    } as any);
+
+    const result = await applicationService.prepJob(url, "greenhouse");
+
+    expect(result.exists).toBe(true);
+    expect(result.hasTailoredPdf).toBe(true);
+    expect(result.pdfStale).toBe(true);
+    expect(result.pdfStaleReason).toBe("age");
   });
 });
