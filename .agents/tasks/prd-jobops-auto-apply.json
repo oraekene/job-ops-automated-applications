@@ -650,7 +650,7 @@
     {
       "id": "US-021b",
       "title": "Extension vitest: blocker detection",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-017"
       ],
