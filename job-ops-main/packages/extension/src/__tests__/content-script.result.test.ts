@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { buildPayloadMock, sendMessageMock } = vi.hoisted(() => ({
   buildPayloadMock: vi.fn(),
@@ -60,7 +60,7 @@ vi.mock("../drivers/shared/file-injector", () => ({
   ),
 }));
 
-import { reportResult, runDoFill } from "../content-script";
+import { runDoFill } from "../content-script";
 
 function setLocationHref(url: string) {
   Object.defineProperty(window, "location", {
@@ -84,9 +84,7 @@ describe("reportResult (US-016a)", () => {
 
   it("posts a result with outcome 'submitted' on successful fill", async () => {
     buildPayloadMock.mockReset();
-    setLocationHref(
-      "https://boards.greenhouse.io/acme/jobs/1?jobId=job-sub",
-    );
+    setLocationHref("https://boards.greenhouse.io/acme/jobs/1?jobId=job-sub");
     uploadFlags.dataTransferPresent = true;
     document.body.innerHTML =
       '<input type="file" data-qa="resume-upload-input" />';
@@ -126,9 +124,7 @@ describe("reportResult (US-016a)", () => {
 
   it("posts a result with outcome 'skipped' and reason when resume upload is missing", async () => {
     buildPayloadMock.mockReset();
-    setLocationHref(
-      "https://jobs.lever.co/globex/abc-1?jobId=job-skip",
-    );
+    setLocationHref("https://jobs.lever.co/globex/abc-1?jobId=job-skip");
     uploadFlags.dataTransferPresent = true;
     document.body.innerHTML = "";
     buildPayloadMock.mockResolvedValue({
@@ -162,9 +158,7 @@ describe("reportResult (US-016a)", () => {
 
   it("posts a result with outcome 'failed' when an uncaught throw occurs", async () => {
     buildPayloadMock.mockReset();
-    setLocationHref(
-      "https://boards.greenhouse.io/acme/jobs/1?jobId=job-fail",
-    );
+    setLocationHref("https://boards.greenhouse.io/acme/jobs/1?jobId=job-fail");
     buildPayloadMock.mockRejectedValue(new Error("network boom"));
 
     await runDoFill();
@@ -186,17 +180,13 @@ describe("reportResult (US-016a)", () => {
 describe("extractConfirmationId (US-016a)", () => {
   it("extracts gh_jid from query params", async () => {
     const { extractConfirmationId } = await import("../content-script");
-    setLocationHref(
-      "https://boards.greenhouse.io/acme/apply?gh_jid=abc-123",
-    );
+    setLocationHref("https://boards.greenhouse.io/acme/apply?gh_jid=abc-123");
     expect(extractConfirmationId()).toBe("abc-123");
   });
 
   it("extracts confirmation id from pathname", async () => {
     const { extractConfirmationId } = await import("../content-script");
-    setLocationHref(
-      "https://boards.greenhouse.io/acme/confirmation/xyz-789",
-    );
+    setLocationHref("https://boards.greenhouse.io/acme/confirmation/xyz-789");
     expect(extractConfirmationId()).toBe("xyz-789");
   });
 

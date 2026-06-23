@@ -6,7 +6,7 @@ import { detectBlocker } from "./lib/detect-blocker";
 import type { JobopsResult, PayloadResponse } from "./lib/jobops-api";
 import { ApiError, JobOpsApi, NetworkError } from "./lib/jobops-api";
 
-const API_BASE = "http://localhost:3005";
+const API_BASE = "http://localhost:3001";
 const api = new JobOpsApi(API_BASE);
 
 let panelShadow: ShadowRoot | null = null;

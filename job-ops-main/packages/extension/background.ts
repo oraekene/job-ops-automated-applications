@@ -10,7 +10,7 @@ const POLL_PERIOD_MINUTES = 0.5;
 const BACKOFF_DELAYS_S = [30, 60, 120, 240, 300];
 const QUEUE_LIMIT = 10;
 const MAX_CONCURRENT_TABS = 3;
-const API_BASE = "http://localhost:3005";
+const API_BASE = "http://localhost:3001";
 const TOGGLE_KEY = "autoApply.enabled";
 const TAB_TIMEOUT_MS = 120_000;
 const REPORT_RETRY_DELAYS_MS = [1000, 2000, 4000];
@@ -95,7 +95,7 @@ async function reportWithRetry(msg: JobopsResult): Promise<void> {
     try {
       await api.reportQueueResult(msg);
       return;
-    } catch (err) {
+    } catch (_err) {
       const isLast = attempt === REPORT_RETRY_DELAYS_MS.length - 1;
       if (!isLast) {
         const delay = REPORT_RETRY_DELAYS_MS[attempt];
@@ -143,10 +143,7 @@ async function flushPendingResults(): Promise<void> {
     }
 
     await new Promise<void>((resolve) => {
-      chromeStorage.local.set(
-        { [PENDING_RESULTS_KEY]: remaining },
-        resolve,
-      );
+      chromeStorage.local.set({ [PENDING_RESULTS_KEY]: remaining }, resolve);
     });
   } catch (err) {
     console.warn("JobOps: failed to flush pending results", err);
@@ -246,20 +243,14 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.outcome === "submitted" && typeof tabId === "number") {
-      chromeTabs.captureVisibleTab(
-        tabId,
-        { format: "png" },
-        (dataUrl) => {
-          const screenshotBase64 = dataUrl
-            ? dataUrl.split(",")[1]
-            : undefined;
-          const reportMsg: JobopsResult = {
-            ...message,
-            screenshotBase64: screenshotBase64 ?? undefined,
-          };
-          trackWork(reportWithRetry(reportMsg));
-        },
-      );
+      chromeTabs.captureVisibleTab(tabId, { format: "png" }, (dataUrl) => {
+        const screenshotBase64 = dataUrl ? dataUrl.split(",")[1] : undefined;
+        const reportMsg: JobopsResult = {
+          ...message,
+          screenshotBase64: screenshotBase64 ?? undefined,
+        };
+        trackWork(reportWithRetry(reportMsg));
+      });
     } else {
       trackWork(reportWithRetry(message));
     }

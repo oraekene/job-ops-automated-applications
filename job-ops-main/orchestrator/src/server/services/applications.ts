@@ -157,7 +157,11 @@ export const applicationService = {
       jobId,
       customQuestions,
     );
-    const cover_letter = await buildCoverLetter(jobId, profile, screening_answers);
+    const cover_letter = await buildCoverLetter(
+      jobId,
+      profile,
+      screening_answers,
+    );
     const { resume_pdf_base64, resume_filename } =
       await buildTailoredPdf(jobId);
 

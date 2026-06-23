@@ -1011,7 +1011,7 @@ export async function regenerateMessage(input: {
   }
 
   // Fallback for legacy messages without parentMessageId: walk backwards in time
-  if (!parentUserMessage || parentUserMessage.role !== "user") {
+  if (parentUserMessage?.role !== "user") {
     const messages = await jobChatRepo.listMessagesForThread(input.threadId, {
       limit: 200,
     });
@@ -1262,7 +1262,7 @@ export async function cancelRun(input: {
     errorMessage: "Generation cancelled by user",
   });
 
-  if (!runAfterCancel || runAfterCancel.status !== "cancelled") {
+  if (runAfterCancel?.status !== "cancelled") {
     return {
       cancelled: false,
       alreadyFinished: true,

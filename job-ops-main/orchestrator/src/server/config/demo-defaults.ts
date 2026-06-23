@@ -290,17 +290,16 @@ export const DEMO_DEFAULT_STAGE_EVENTS: DemoDefaultStageEvent[] = [
   ...DEMO_GENERATED_STAGE_EVENTS,
 ];
 
+export type {
+  DemoDefaultJob,
+  DemoDefaultPipelineRun,
+  DemoDefaultSettings,
+  DemoDefaultStageEvent,
+};
 export {
   DEMO_BASELINE_NAME,
   DEMO_BASELINE_VERSION,
   DEMO_DEFAULT_PIPELINE_RUNS,
   DEMO_DEFAULT_SETTINGS,
   DEMO_PROJECT_CATALOG,
-};
-
-export type {
-  DemoDefaultJob,
-  DemoDefaultPipelineRun,
-  DemoDefaultSettings,
-  DemoDefaultStageEvent,
 };

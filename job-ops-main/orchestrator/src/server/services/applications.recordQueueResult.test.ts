@@ -11,7 +11,9 @@ describe.sequential("applicationService.reportQueueResult job-pointer + cleanup 
 
   beforeEach(async () => {
     vi.resetModules();
-    tempDir = await mkdtemp(join(tmpdir(), "job-ops-record-queue-result-test-"));
+    tempDir = await mkdtemp(
+      join(tmpdir(), "job-ops-record-queue-result-test-"),
+    );
     process.env.DATA_DIR = tempDir;
     process.env.NODE_ENV = "test";
 

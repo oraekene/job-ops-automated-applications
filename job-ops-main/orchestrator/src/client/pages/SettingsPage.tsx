@@ -18,6 +18,7 @@ import {
   toRxResumeValidationPayload,
   validateAndMaybePersistRxResumeMode,
 } from "@client/lib/rxresume-config";
+import { AutoApplicationSettingsSection } from "@client/pages/settings/components/AutoApplicationSettingsSection";
 import { BackupSettingsSection } from "@client/pages/settings/components/BackupSettingsSection";
 import { ChatSettingsSection } from "@client/pages/settings/components/ChatSettingsSection";
 import { DangerZoneSection } from "@client/pages/settings/components/DangerZoneSection";
@@ -107,6 +108,10 @@ const DEFAULT_FORM_VALUES: UpdateSettingsInput = {
   autoSkipScoreThreshold: null,
   blockedCompanyKeywords: [],
   scoringInstructions: "",
+  autoApplicationEnabled: null,
+  autoApplicationDefaultCoverLetter: "",
+  autoApplicationSalaryRequirement: "",
+  autoApplicationPdfMaxAgeDays: null,
   ghostwriterSystemPromptTemplate: "",
   tailoringPromptTemplate: "",
   scoringPromptTemplate: "",
@@ -131,6 +136,7 @@ type SettingsSectionId =
   | "chat"
   | "prompt-templates"
   | "scoring"
+  | "auto-application"
   | "reactive-resume"
   | "webhooks"
   | "tracer-links"
@@ -205,6 +211,19 @@ const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
         description:
           "Salary penalties, thresholds, keywords, and scorer hints.",
         searchTerms: ["threshold", "salary", "keywords", "instructions"],
+      },
+      {
+        id: "auto-application",
+        label: "Auto-Application",
+        description: "Cover letter, salary requirements, and PDF age limits.",
+        searchTerms: [
+          "auto",
+          "automation",
+          "cover letter",
+          "salary",
+          "pdf",
+          "age",
+        ],
       },
     ],
   },
@@ -317,6 +336,12 @@ const SECTION_FIELD_MAP: Record<
     "autoSkipScoreThreshold",
     "blockedCompanyKeywords",
     "scoringInstructions",
+  ],
+  "auto-application": [
+    "autoApplicationEnabled",
+    "autoApplicationDefaultCoverLetter",
+    "autoApplicationSalaryRequirement",
+    "autoApplicationPdfMaxAgeDays",
   ],
   "reactive-resume": [
     "pdfRenderer",
@@ -432,6 +457,10 @@ const NULL_SETTINGS_PAYLOAD: UpdateSettingsInput = {
   autoSkipScoreThreshold: null,
   blockedCompanyKeywords: null,
   scoringInstructions: null,
+  autoApplicationEnabled: null,
+  autoApplicationDefaultCoverLetter: null,
+  autoApplicationSalaryRequirement: null,
+  autoApplicationPdfMaxAgeDays: null,
   ghostwriterSystemPromptTemplate: null,
   tailoringPromptTemplate: null,
   scoringPromptTemplate: null,
@@ -483,6 +512,12 @@ const mapSettingsToForm = (data: AppSettings): UpdateSettingsInput => ({
   autoSkipScoreThreshold: data.autoSkipScoreThreshold.override,
   blockedCompanyKeywords: data.blockedCompanyKeywords.override ?? [],
   scoringInstructions: data.scoringInstructions.override ?? "",
+  autoApplicationEnabled: data.autoApplicationEnabled.override,
+  autoApplicationDefaultCoverLetter:
+    data.autoApplicationDefaultCoverLetter.override ?? "",
+  autoApplicationSalaryRequirement:
+    data.autoApplicationSalaryRequirement.override ?? "",
+  autoApplicationPdfMaxAgeDays: data.autoApplicationPdfMaxAgeDays.override,
   ghostwriterSystemPromptTemplate:
     data.ghostwriterSystemPromptTemplate.value ?? "",
   tailoringPromptTemplate: data.tailoringPromptTemplate.value ?? "",
@@ -721,6 +756,24 @@ const getDerivedSettings = (settings: AppSettings | null) => {
         default: settings?.scoringInstructions?.default ?? "",
       },
     },
+    autoApplication: {
+      autoApplicationEnabled: {
+        effective: settings?.autoApplicationEnabled?.value ?? false,
+        default: settings?.autoApplicationEnabled?.default ?? false,
+      },
+      autoApplicationDefaultCoverLetter: {
+        effective: settings?.autoApplicationDefaultCoverLetter?.value ?? "",
+        default: settings?.autoApplicationDefaultCoverLetter?.default ?? "",
+      },
+      autoApplicationSalaryRequirement: {
+        effective: settings?.autoApplicationSalaryRequirement?.value ?? "",
+        default: settings?.autoApplicationSalaryRequirement?.default ?? "",
+      },
+      autoApplicationPdfMaxAgeDays: {
+        effective: settings?.autoApplicationPdfMaxAgeDays?.value ?? 7,
+        default: settings?.autoApplicationPdfMaxAgeDays?.default ?? 7,
+      },
+    },
     promptTemplates: {
       ghostwriterSystemPromptTemplate: {
         effective: settings?.ghostwriterSystemPromptTemplate?.value ?? "",
@@ -913,6 +966,7 @@ export const SettingsPage: React.FC = () => {
     profileProjects,
     backup,
     scoring,
+    autoApplication,
     promptTemplates,
   } = derived;
 
@@ -1229,6 +1283,22 @@ export const SettingsPage: React.FC = () => {
           normalizeString(data.scoringInstructions),
           scoring.scoringInstructions.default,
         ),
+        autoApplicationEnabled: nullIfSame(
+          data.autoApplicationEnabled,
+          autoApplication.autoApplicationEnabled.default,
+        ),
+        autoApplicationDefaultCoverLetter: nullIfSame(
+          normalizeString(data.autoApplicationDefaultCoverLetter),
+          autoApplication.autoApplicationDefaultCoverLetter.default,
+        ),
+        autoApplicationSalaryRequirement: nullIfSame(
+          normalizeString(data.autoApplicationSalaryRequirement),
+          autoApplication.autoApplicationSalaryRequirement.default,
+        ),
+        autoApplicationPdfMaxAgeDays: nullIfSame(
+          data.autoApplicationPdfMaxAgeDays,
+          autoApplication.autoApplicationPdfMaxAgeDays.default,
+        ),
         ghostwriterSystemPromptTemplate: nullIfSame(
           normalizeString(data.ghostwriterSystemPromptTemplate),
           promptTemplates.ghostwriterSystemPromptTemplate.default,
@@ -1476,6 +1546,10 @@ export const SettingsPage: React.FC = () => {
           scoring.scoringInstructions.effective
           ? { label: "Customized", variant: "outline" as const }
           : { label: "Default rules", variant: "secondary" as const };
+      case "auto-application":
+        return autoApplication.autoApplicationEnabled.effective
+          ? { label: "Enabled", variant: "outline" as const }
+          : { label: "Disabled", variant: "secondary" as const };
       case "reactive-resume":
         return hasRxResumeAccess
           ? { label: "Connected", variant: "outline" as const }
@@ -1548,6 +1622,16 @@ export const SettingsPage: React.FC = () => {
       activeSectionContent = (
         <ScoringSettingsSection
           values={scoring}
+          isLoading={isLoading}
+          isSaving={isSaving}
+          layoutMode="panel"
+        />
+      );
+      break;
+    case "auto-application":
+      activeSectionContent = (
+        <AutoApplicationSettingsSection
+          values={autoApplication}
           isLoading={isLoading}
           isSaving={isSaving}
           layoutMode="panel"

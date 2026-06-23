@@ -82,7 +82,7 @@ export class InMemoryJobQueue implements JobQueue {
     const now = Date.now();
     for (const jobId of this.queueOrder) {
       const job = this.jobs.get(jobId);
-      if (!job || job.state !== "pending") continue;
+      if (job?.state !== "pending") continue;
       if (job.queue !== queue) continue;
       if (job.availableAt > now) continue;
 

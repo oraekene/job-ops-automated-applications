@@ -7,7 +7,7 @@
   "host_permissions": [
     "https://*.greenhouse.io/*",
     "https://*.lever.co/*",
-    "http://localhost:3005/*"
+    "http://localhost:3001/*"
   ],
   "background": {
     "service_worker": "background.js",

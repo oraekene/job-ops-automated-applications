@@ -25,3 +25,6 @@ tmp/
 
 # Virtual environment for Python
 .venv
+
+# Binaries
+orchestrator/bin/

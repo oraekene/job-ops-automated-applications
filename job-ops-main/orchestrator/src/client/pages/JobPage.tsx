@@ -505,7 +505,7 @@ export const JobPage: React.FC = () => {
   };
 
   const handleDownloadPdf = async () => {
-    if (!job || !job.pdfPath || pdfActionsDisabled) return;
+    if (!job?.pdfPath || pdfActionsDisabled) return;
     const filename = `${safeFilenamePart(job.employer)}-${safeFilenamePart(
       job.title,
     )}-resume.pdf`;

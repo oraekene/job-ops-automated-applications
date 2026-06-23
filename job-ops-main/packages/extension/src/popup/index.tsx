@@ -25,7 +25,9 @@ function Popup() {
       setAutoFill(s.autoFill);
     });
     chrome.storage.local.get("autoApply.enabled", (data) => {
-      setAutoApply(Boolean((data as Record<string, unknown>)["autoApply.enabled"]));
+      setAutoApply(
+        Boolean((data as Record<string, unknown>)["autoApply.enabled"]),
+      );
     });
   }, []);
 
@@ -104,7 +106,8 @@ function Popup() {
         >
           {serverOnline && queueStatus ? (
             <>
-              Queue: {queueStatus.pending} pending · {queueStatus.submittedToday} applied today
+              Queue: {queueStatus.pending} pending ·{" "}
+              {queueStatus.submittedToday} applied today
             </>
           ) : (
             <span style={{ color: "#c62828" }}>Server offline</span>

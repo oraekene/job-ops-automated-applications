@@ -13,33 +13,36 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import {
+  type BetterSQLite3Database,
+  drizzle,
+} from "drizzle-orm/better-sqlite3";
 import { getDataDir } from "../config/dataDir";
 import * as schema from "./schema";
 
 type CachedDb = { sqlite: Database.Database; path: string };
 
 const globalForDb = globalThis as unknown as {
-	__jobopsDb?: CachedDb;
+  __jobopsDb?: CachedDb;
 };
 
 function ensureDataDir(path: string): void {
-	const dir = dirname(path);
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
 }
 
 function openSqlite(): Database.Database {
-	const dbPath = join(getDataDir(), "jobs.db");
-	ensureDataDir(dbPath);
-	const sqlite = new Database(dbPath);
-	sqlite.pragma("journal_mode = WAL");
-	return sqlite;
+  const dbPath = join(getDataDir(), "jobs.db");
+  ensureDataDir(dbPath);
+  const sqlite = new Database(dbPath);
+  sqlite.pragma("journal_mode = WAL");
+  return sqlite;
 }
 
 function currentDbPath(): string {
-	return join(getDataDir(), "jobs.db");
+  return join(getDataDir(), "jobs.db");
 }
 
 /**
@@ -49,26 +52,26 @@ function currentDbPath(): string {
  * and recreated if the resolved `DATA_DIR` changes between calls.
  */
 export function getDb(): Database.Database {
-	const path = currentDbPath();
-	if (globalForDb.__jobopsDb && globalForDb.__jobopsDb.path !== path) {
-		globalForDb.__jobopsDb.sqlite.close();
-		globalForDb.__jobopsDb = undefined;
-	}
-	if (!globalForDb.__jobopsDb) {
-		globalForDb.__jobopsDb = { sqlite: openSqlite(), path };
-	}
-	return globalForDb.__jobopsDb.sqlite;
+  const path = currentDbPath();
+  if (globalForDb.__jobopsDb && globalForDb.__jobopsDb.path !== path) {
+    globalForDb.__jobopsDb.sqlite.close();
+    globalForDb.__jobopsDb = undefined;
+  }
+  if (!globalForDb.__jobopsDb) {
+    globalForDb.__jobopsDb = { sqlite: openSqlite(), path };
+  }
+  return globalForDb.__jobopsDb.sqlite;
 }
 
 export const db: BetterSQLite3Database<typeof schema> = drizzle(getDb(), {
-	schema,
+  schema,
 });
 
 export { schema };
 
 export function closeDb(): void {
-	const cached = globalForDb.__jobopsDb;
-	if (!cached) return;
-	cached.sqlite.close();
-	globalForDb.__jobopsDb = undefined;
+  const cached = globalForDb.__jobopsDb;
+  if (!cached) return;
+  cached.sqlite.close();
+  globalForDb.__jobopsDb = undefined;
 }

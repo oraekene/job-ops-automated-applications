@@ -666,7 +666,7 @@
     {
       "id": "US-022",
       "title": "End-to-end smoke: docs + README updates for the autonomous flow",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-013",
         "US-018"

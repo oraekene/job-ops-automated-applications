@@ -64,6 +64,13 @@ export type ScoringValues = {
   scoringInstructions: EffectiveDefault<string>;
 };
 
+export type AutoApplicationValues = {
+  autoApplicationEnabled: EffectiveDefault<boolean>;
+  autoApplicationDefaultCoverLetter: EffectiveDefault<string>;
+  autoApplicationSalaryRequirement: EffectiveDefault<string>;
+  autoApplicationPdfMaxAgeDays: EffectiveDefault<number>;
+};
+
 export type PromptTemplatesValues = {
   ghostwriterSystemPromptTemplate: EffectiveDefault<string>;
   tailoringPromptTemplate: EffectiveDefault<string>;

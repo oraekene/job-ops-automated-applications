@@ -386,7 +386,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
   }, [handleJobMoved, onJobUpdated, selectedJob]);
 
   const handleMarkApplied = useCallback(async () => {
-    if (!selectedJob || selectedJob.status !== "ready") return;
+    if (selectedJob?.status !== "ready") return;
     try {
       setIsApplying(true);
       await markAsAppliedMutation.mutateAsync(selectedJob.id);
@@ -468,16 +468,14 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
   }, [handleJobMoved, onJobUpdated, selectedJob, skipJobMutation]);
 
   const handleOpenPdf = useCallback(() => {
-    if (!selectedJob || !selectedJob.pdfPath || isPdfRegenerating(selectedJob))
-      return;
+    if (!selectedJob?.pdfPath || isPdfRegenerating(selectedJob)) return;
     void openJobPdf(selectedJob.id).catch((error) => {
       showErrorToast(error, "Could not open PDF");
     });
   }, [selectedJob]);
 
   const handleDownloadPdf = useCallback(() => {
-    if (!selectedJob || !selectedJob.pdfPath || isPdfRegenerating(selectedJob))
-      return;
+    if (!selectedJob?.pdfPath || isPdfRegenerating(selectedJob)) return;
     void downloadJobPdf(selectedJob.id, selectedPdfFilename).catch((error) => {
       showErrorToast(error, "Could not download PDF");
     });

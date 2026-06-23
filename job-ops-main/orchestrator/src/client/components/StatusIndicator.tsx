@@ -115,8 +115,8 @@ const StatusBadgeIndicator: React.FC<
 > = (props) => <StatusIndicator {...props} appearance="badge" />;
 
 export {
-  StatusIndicator,
   getJobStatusIndicator,
   getTracerStatusIndicator,
   StatusBadgeIndicator,
+  StatusIndicator,
 };

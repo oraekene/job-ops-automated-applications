@@ -24,7 +24,6 @@ vi.mock("./suitability", () => ({
 import { pdfExists } from "./pdf";
 import { getProfile } from "./profile";
 import { getEffectiveSettings } from "./settings";
-import { recomputeAndPersistSuitabilityScore } from "./suitability";
 
 describe.sequential("applicationService.prepJob (US-002)", () => {
   let tempDir: string;

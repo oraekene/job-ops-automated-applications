@@ -32,6 +32,7 @@ type SupportedImportMediaType =
 
 type SupportedRuntimeProvider =
   | "openai"
+  | "openai_compatible"
   | "openrouter"
   | "gemini"
   | "gemini_cli";
@@ -68,6 +69,7 @@ type ResumeImportFileInput = {
 
 const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 const OPENAI_DEFAULT_TIMEOUT_MS = 60_000;
+const OPENAI_COMPATIBLE_TIMEOUT_MS = 180_000;
 const OPENROUTER_DEFAULT_TIMEOUT_MS = 90_000;
 const GEMINI_DEFAULT_TIMEOUT_MS = 90_000;
 
@@ -91,6 +93,10 @@ Rules:
 - For rich text descriptions and summaries, preserve structure using simple HTML tags only: <p>, <ul>, <li>, <strong>, <em>.
 - Do not add sections or keys that do not exist in the template.
 - Keep dates, names, locations, and organization names exactly as written when possible.
+- If URLs appear in the resume text, extract them into the corresponding website.url fields. Use the full URL including https:// prefix.
+- Always populate website.url fields when URLs are visible in the resume text.
+- When you see a platform name like "Github", "LinkedIn", "Replit", "Dune", "Portfolio", "Personal Site", "Website", "Blog", or similar as a label, construct the most likely URL from the resume context. For example, if you see "Github" and a username elsewhere in the resume, use "https://github.com/{username}". If you see "LinkedIn", use "https://linkedin.com/in/{username}". Map these to the appropriate website.url fields in the profiles section.
+- Place all platform links (Github, LinkedIn, Replit, Dune, portfolio, etc.) in the sections.profiles.items array with the appropriate network name and constructed URL.
 `.trim();
 
 type RecordLike = Record<string, unknown>;
@@ -118,6 +124,7 @@ function normalizeRuntimeProvider(
 ): SupportedRuntimeProvider | null {
   const normalized = provider?.trim().toLowerCase().replace(/-/g, "_");
   if (normalized === "openai") return "openai";
+  if (normalized === "openai_compatible") return "openai_compatible";
   if (normalized === "openrouter" || normalized === "open_router") {
     return "openrouter";
   }
@@ -545,6 +552,26 @@ async function extractPdfText(decoded: Buffer): Promise<string> {
   }
 }
 
+function extractUrlsFromText(text: string): string[] {
+  const urlPattern =
+    /(?:https?:\/\/[^\s,;)\]}>]+|(?<![\/\\])[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|dev|co|me|info|edu|gov)(?:\/[^\s,;)\]}>]*)?)/gi;
+  const matches = text.match(urlPattern) ?? [];
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const raw of matches) {
+    let url = raw.replace(/[.,;:!?)]+$/, "");
+    if (!url.startsWith("http")) {
+      url = `https://${url}`;
+    }
+    const lower = url.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      urls.push(url);
+    }
+  }
+  return urls;
+}
+
 async function extractResumeDocxText(decoded: Buffer): Promise<string> {
   let text: string;
   try {
@@ -569,6 +596,18 @@ async function extractResumeDocxText(decoded: Buffer): Promise<string> {
 function buildDocxPrompt(documentText: string, fileName: string): string {
   return `
 The resume file was uploaded as DOCX and converted locally to plain text before extraction.
+File name: ${fileName}
+
+Extracted resume text:
+${documentText}
+
+${buildUserPrompt()}
+`.trim();
+}
+
+function buildPdfTextPrompt(documentText: string, fileName: string): string {
+  return `
+The resume file was uploaded as PDF and converted locally to plain text before extraction.
 File name: ${fileName}
 
 Extracted resume text:
@@ -902,6 +941,77 @@ async function extractWithOpenAi(args: {
   return text;
 }
 
+async function extractWithOpenAiCompatible(args: {
+  apiKey: string;
+  baseUrl: string | null;
+  model: string;
+  mediaType: SupportedImportMediaType;
+  fileName: string;
+  dataBase64: string;
+  documentText?: string | null;
+  requestId: string | undefined;
+}): Promise<string> {
+  const url = joinUrl(
+    args.baseUrl || "https://api.openai.com",
+    "/chat/completions",
+  );
+  let promptText = args.documentText
+    ? (args.mediaType === "application/pdf"
+        ? buildPdfTextPrompt(args.documentText, args.fileName)
+        : buildDocxPrompt(args.documentText, args.fileName))
+    : buildUserPrompt();
+
+  if (args.documentText) {
+    const detectedUrls = extractUrlsFromText(args.documentText);
+    if (detectedUrls.length > 0) {
+      promptText += `\n\nDetected URLs in resume text:\n${detectedUrls.map((u) => `- ${u}`).join("\n")}\n\nMap these URLs to the correct website.url fields in the JSON output. Use the full URL with https:// prefix.`;
+    }
+  }
+
+  const userContent: unknown[] = [
+    { type: "text" as const, text: promptText },
+  ];
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: buildHeaders({
+      apiKey: args.apiKey,
+      provider: "openai_compatible",
+    }),
+    body: JSON.stringify({
+      model: args.model,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userContent },
+      ],
+    }),
+    signal: AbortSignal.timeout(OPENAI_COMPATIBLE_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    const detail = parseErrorMessage(await getResponseDetail(response));
+    throw new AppError({
+      status: response.status >= 500 ? 502 : 503,
+      message: detail || `OpenAI-compatible provider returned ${response.status}.`,
+      details: {
+        provider: "openai_compatible",
+        model: args.model,
+        requestId: args.requestId ?? null,
+      },
+    });
+  }
+
+  const payload = await response.json();
+  const text = payload?.choices?.[0]?.message?.content?.trim();
+  if (!text) {
+    throw upstreamError(
+      "OpenAI-compatible provider returned an empty response for resume import.",
+    );
+  }
+  return text;
+}
+
 async function extractWithOpenRouter(args: {
   apiKey: string;
   baseUrl: string | null;
@@ -1167,6 +1277,9 @@ async function extractResumeFromProvider(args: {
   if (args.provider === "openai") {
     return extractWithOpenAi(args);
   }
+  if (args.provider === "openai_compatible") {
+    return extractWithOpenAiCompatible(args);
+  }
   if (args.provider === "openrouter") {
     return extractWithOpenRouter(args);
   }
@@ -1214,6 +1327,19 @@ export async function importDesignResumeFromFile(
       mediaType === DOCX_MIME ? await extractResumeDocxText(decoded) : null;
     if (isGeminiCli && mediaType === "application/pdf") {
       documentText = await extractPdfText(decoded);
+    }
+    if (provider === "openai_compatible" && mediaType === "application/pdf") {
+      documentText = await extractPdfText(decoded);
+      if (!documentText) {
+        throw badRequest(
+          "Resume PDF text extraction returned empty content. The file may be scanned or encrypted.",
+        );
+      }
+      logger.info("PDF text extracted for openai_compatible provider", {
+        requestId: requestId ?? null,
+        textLength: documentText.length,
+        fileName,
+      });
     }
     const rawText = await extractResumeFromProvider({
       provider,

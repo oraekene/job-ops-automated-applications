@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, JobOpsApi, NetworkError } from "../jobops-api";
 
 describe("JobOpsApi", () => {
-  const api = new JobOpsApi("http://localhost:3005");
+  const api = new JobOpsApi("http://localhost:3001");
 
   beforeEach(() => {
     vi.restoreAllMocks();

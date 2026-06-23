@@ -8,8 +8,8 @@
  */
 
 import type { Job } from "@shared/types";
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import { getDb, schema } from "../db";
 import { getActiveTenantId } from "../tenancy/context";
 import { scoreJobSuitability } from "./scorer";
@@ -20,7 +20,7 @@ import { scoreJobSuitability } from "./scorer";
  * connection is re-opened (e.g. between tests when `closeDb()` runs).
  */
 function currentDb() {
-	return drizzle(getDb(), { schema });
+  return drizzle(getDb(), { schema });
 }
 
 /**
@@ -29,21 +29,21 @@ function currentDb() {
  * the stored score is older than the staleness threshold.
  */
 export async function recomputeAndPersistSuitabilityScore(
-	job: Job,
-	profile: Record<string, unknown>,
+  job: Job,
+  profile: Record<string, unknown>,
 ): Promise<{ score: number; reason: string }> {
-	const result = await scoreJobSuitability(job, profile);
-	const now = new Date().toISOString();
-	currentDb()
-		.update(schema.jobs)
-		.set({
-			suitabilityScore: result.score,
-			suitabilityReason: result.reason,
-			suitabilityComputedAt: now,
-		})
-		.where(sql`${schema.jobs.id} = ${job.id}`)
-		.run();
-	return result;
+  const result = await scoreJobSuitability(job, profile);
+  const now = new Date().toISOString();
+  currentDb()
+    .update(schema.jobs)
+    .set({
+      suitabilityScore: result.score,
+      suitabilityReason: result.reason,
+      suitabilityComputedAt: now,
+    })
+    .where(sql`${schema.jobs.id} = ${job.id}`)
+    .run();
+  return result;
 }
 
 /**
@@ -52,11 +52,11 @@ export async function recomputeAndPersistSuitabilityScore(
  * from `onProfileChange` so the next prepJob triggers a recompute.
  */
 export function invalidateSuitabilityForActiveTenant(): number {
-	const tenantId = getActiveTenantId();
-	const result = currentDb()
-		.update(schema.jobs)
-		.set({ suitabilityComputedAt: null })
-		.where(sql`${schema.jobs.tenantId} = ${tenantId}`)
-		.run();
-	return result.changes ?? 0;
+  const tenantId = getActiveTenantId();
+  const result = currentDb()
+    .update(schema.jobs)
+    .set({ suitabilityComputedAt: null })
+    .where(sql`${schema.jobs.tenantId} = ${tenantId}`)
+    .run();
+  return result.changes ?? 0;
 }

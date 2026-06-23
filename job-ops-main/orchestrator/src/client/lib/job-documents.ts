@@ -11,6 +11,7 @@ import {
   type JobDocumentTypeTarget,
 } from "@shared/job-document-classification.js";
 
+export type { JobDocumentTypeTarget };
 export {
   canOpenJobDocumentInline,
   canPreviewJobDocumentAsRawText,
@@ -22,7 +23,6 @@ export {
   isJobDocumentSafeInlineImage,
   isJobDocumentTextLike,
 };
-export type { JobDocumentTypeTarget };
 
 const bytesFormatter = new Intl.NumberFormat("en", {
   maximumFractionDigits: 1,

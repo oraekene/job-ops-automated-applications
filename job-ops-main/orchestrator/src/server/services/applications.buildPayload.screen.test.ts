@@ -12,15 +12,9 @@ vi.mock("./ghostwriter", () => ({
   generateCoverLetterForJob: vi.fn(),
   ScreeningAnswersUnavailableError: class ScreeningAnswersUnavailableError extends Error {
     name = "ScreeningAnswersUnavailableError" as const;
-    constructor(message: string) {
-      super(message);
-    }
   },
   ScreeningAnswersValidationError: class ScreeningAnswersValidationError extends Error {
     name = "ScreeningAnswersValidationError" as const;
-    constructor(message: string) {
-      super(message);
-    }
   },
   CoverLetterValidationError: class CoverLetterValidationError extends Error {
     name = "CoverLetterValidationError" as const;
@@ -43,7 +37,7 @@ describe.sequential("applicationService.buildPayload screening answers (US-006)"
   let applicationService: any;
   let getProfile: any;
   let generateScreeningAnswersForJob: any;
-  let generateCoverLetterForJob: any;
+  let _generateCoverLetterForJob: any;
   let generatePdf: any;
   let getPdfPath: any;
 
@@ -63,7 +57,7 @@ describe.sequential("applicationService.buildPayload screening answers (US-006)"
     // Re-import mocks AFTER vi.resetModules so they match the references
     // that applications.ts picks up on its dynamic import.
     ({ getProfile } = await import("./profile"));
-    ({ generateScreeningAnswersForJob, generateCoverLetterForJob } =
+    ({ generateScreeningAnswersForJob, _generateCoverLetterForJob } =
       await import("./ghostwriter"));
     ({ generatePdf, getPdfPath } = await import("./pdf"));
 

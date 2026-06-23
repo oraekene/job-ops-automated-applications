@@ -7,7 +7,11 @@ export interface ExtensionSettings {
 export async function getSettings(): Promise<ExtensionSettings> {
   return new Promise((resolve) => {
     chrome.storage.sync.get(
-      { serverUrl: "http://localhost:3005", autoFill: true, autoApplyEnabled: false },
+      {
+        serverUrl: "http://localhost:3001",
+        autoFill: true,
+        autoApplyEnabled: false,
+      },
       (items) => {
         resolve(items as ExtensionSettings);
       },

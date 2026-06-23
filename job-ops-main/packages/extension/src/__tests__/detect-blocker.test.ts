@@ -30,7 +30,7 @@ describe("detectBlocker", () => {
 
   it("detects MFA prompt", () => {
     document.body.innerHTML =
-      '<div>Please verify your identity to continue</div>';
+      "<div>Please verify your identity to continue</div>";
     expect(detectBlocker()).toEqual({
       blocked: true,
       reason: "MFA prompt detected",
@@ -38,8 +38,7 @@ describe("detectBlocker", () => {
   });
 
   it("detects Greenhouse sign-in modal", () => {
-    document.body.innerHTML =
-      '<div class="modal">Sign in to apply</div>';
+    document.body.innerHTML = '<div class="modal">Sign in to apply</div>';
     expect(detectBlocker()).toEqual({
       blocked: true,
       reason: "sign-in required",
@@ -47,8 +46,7 @@ describe("detectBlocker", () => {
   });
 
   it("detects Lever sign-in modal", () => {
-    document.body.innerHTML =
-      '<div class="modal">Sign in</div>';
+    document.body.innerHTML = '<div class="modal">Sign in</div>';
     expect(detectBlocker()).toEqual({
       blocked: true,
       reason: "sign-in required",
