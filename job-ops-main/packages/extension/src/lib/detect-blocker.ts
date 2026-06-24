@@ -7,15 +7,6 @@ export function detectBlocker(): BlockerResult {
   const body = document.body;
   if (!body) return { blocked: false };
 
-  const text = body.textContent?.toLowerCase() ?? "";
-
-  if (
-    /verify your identity/i.test(text) ||
-    /confirm your identity/i.test(text)
-  ) {
-    return { blocked: true, reason: "MFA prompt detected" };
-  }
-
   const iframes = body.querySelectorAll("iframe");
   for (const iframe of Array.from(iframes)) {
     const src = iframe.getAttribute("src")?.toLowerCase() ?? "";
@@ -28,11 +19,13 @@ export function detectBlocker(): BlockerResult {
   }
 
   const modals = body.querySelectorAll(
-    ".modal, .modal-overlay, [role='dialog']",
+    "[role='dialog'], .modal, .modal-overlay",
   );
   for (const modal of Array.from(modals)) {
+    const style = window.getComputedStyle(modal);
+    if (style.display === "none" || style.visibility === "hidden") continue;
     const modalText = modal.textContent?.toLowerCase() ?? "";
-    if (/sign in/i.test(modalText)) {
+    if (/sign in|log in|authenticate/i.test(modalText)) {
       return { blocked: true, reason: "sign-in required" };
     }
   }

@@ -66,7 +66,7 @@ function showReadyPanel(jobTitle: string, employer: string, score?: number) {
     ${employer ? `<div style="margin-bottom:8px;color:#666;font-size:13px;">${escapeHtml(employer)}</div>` : ""}
     ${score !== undefined ? `<div style="margin-bottom:8px;"><span style="font-size:13px;color:#666;">Fit Score: </span><span style="font-weight:600;color:${score >= 70 ? "#2e7d32" : score >= 40 ? "#e65100" : "#c62828"};">${score}/100</span></div>` : ""}
     <button id="fill-btn" style="width:100%;padding:10px;background:#1976d2;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;">Fill Application</button>
-    <div style="margin-top:8px;font-size:11px;color:#999;text-align:center;">Requires JobOps server on localhost:3005</div>
+    <div style="margin-top:8px;font-size:11px;color:#999;text-align:center;">Requires JobOps server on localhost:3001</div>
   `,
     "Ready",
     "#e3f2fd",
