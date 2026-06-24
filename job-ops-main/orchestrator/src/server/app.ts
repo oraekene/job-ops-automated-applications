@@ -206,6 +206,9 @@ export function createAuthGuard() {
     )
       return true;
 
+    // Chrome extension endpoints (no auth token available from extension).
+    if (normalizedPath.startsWith("/api/applications/")) return true;
+
     return false;
   }
 

@@ -412,6 +412,18 @@ function _fillCustomQuestions(
     }
     if (!container) continue;
 
+    const selectEl = container.querySelector<HTMLSelectElement>("select");
+    if (selectEl) {
+      const option = Array.from(selectEl.options).find((o) =>
+        o.text.toLowerCase().includes(answer.toLowerCase().slice(0, 10)),
+      );
+      if (option) {
+        selectEl.value = option.value;
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      continue;
+    }
+
     const target = container.querySelector<
       HTMLInputElement | HTMLTextAreaElement
     >('textarea, input[type="text"]');
@@ -445,6 +457,20 @@ function fillFormByLabels(data: Record<string, string>): { filled: number } {
     "cover letter": "cover_letter",
     salary: "salary",
     "salary expectations": "salary",
+    website: "website_url",
+    "website url": "website_url",
+    relocation: "relocation",
+    "open to relocation": "relocation",
+    "visa sponsorship": "visa_sponsorship",
+    "visa": "visa_sponsorship",
+    "work authorization": "work_authorization",
+    "authorized to work": "work_authorization",
+    "ai policy": "ai_policy",
+    "in-person": "work_location",
+    "working in-person": "work_location",
+    "work location": "work_location",
+    "pronounce": "name_pronunciation",
+    "pronunciation": "name_pronunciation",
   };
 
   let filled = 0;

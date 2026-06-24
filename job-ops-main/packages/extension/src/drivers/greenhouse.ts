@@ -49,11 +49,26 @@ export function fillGreenhouseForm(payload: GreenHousePayload): {
   );
   questions.forEach((q) => {
     const label = q.querySelector("label")?.textContent?.trim() || "";
-    const textarea = q.querySelector<HTMLTextAreaElement>("textarea");
-    if (textarea && payload.screening_answers[label]) {
-      setReactInputValue(textarea, payload.screening_answers[label]);
-    } else if (label && !payload.screening_answers[label]) {
+    const answer = payload.screening_answers[label];
+
+    const selectEl = q.querySelector<HTMLSelectElement>("select");
+    if (selectEl && answer) {
+      const option = Array.from(selectEl.options).find((o) =>
+        o.text.toLowerCase().includes(answer.toLowerCase().slice(0, 10)),
+      );
+      if (option) {
+        selectEl.value = option.value;
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else if (selectEl && !answer) {
       missingFields.push(label);
+    } else {
+      const textarea = q.querySelector<HTMLTextAreaElement>("textarea");
+      if (textarea && answer) {
+        setReactInputValue(textarea, answer);
+      } else if (label && !answer) {
+        missingFields.push(label);
+      }
     }
   });
 
