@@ -3,16 +3,13 @@ import { createRoot } from "react-dom/client";
 import { JobOpsApi } from "../lib/jobops-api";
 import { getSettings, setSettings } from "../lib/storage";
 
-const API_BASE = "http://localhost:3005";
-const api = new JobOpsApi(API_BASE);
-
 interface QueueStatus {
   pending: number;
   submittedToday: number;
 }
 
 function Popup() {
-  const [serverUrl, setServerUrl] = useState("http://localhost:3005");
+  const [serverUrl, setServerUrl] = useState("http://localhost:3001");
   const [autoFill, setAutoFill] = useState(true);
   const [autoApply, setAutoApply] = useState(false);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
@@ -33,6 +30,7 @@ function Popup() {
 
   const fetchStatus = useCallback(async () => {
     try {
+      const api = new JobOpsApi(serverUrl);
       const res = await api.getQueueStatus();
       setQueueStatus({
         pending: res.counts.pending,
@@ -43,7 +41,7 @@ function Popup() {
       setServerOnline(false);
       setQueueStatus(null);
     }
-  }, []);
+  }, [serverUrl]);
 
   useEffect(() => {
     fetchStatus();
