@@ -39,25 +39,13 @@ async function cleanupAuthSessions(trigger: "startup" | "interval") {
 
 async function startServer() {
   await applyStoredEnvOverrides();
-  try {
-    await initializeExtractorRegistry();
-  } catch (error) {
-    const sanitizedError = sanitizeUnknown(error);
-    logger.error("Failed to initialize extractor registry", {
-      error: sanitizedError,
-    });
-    if (process.env.NODE_ENV === "production") {
-      logger.error(
-        "Extractor registry initialization failed in production. Shutting down server.",
-      );
-      process.exit(1);
-    }
 
-    logger.error(
-      "Extractor registry initialization failed outside production. Server startup aborted.",
-    );
-    return;
-  }
+  // Initialize extractor registry non-blocking — server starts regardless
+  initializeExtractorRegistry().catch((error) => {
+    logger.warn("Extractor registry init failed (server already started)", {
+      error: sanitizeUnknown(error),
+    });
+  });
 
   const app = createApp();
   const PORT = process.env.PORT || 3001;
