@@ -1,7 +1,7 @@
 import type { LlmProviderId } from "@client/pages/settings/utils";
 import type { SearchTermsSuggestionResponse } from "@shared/types.js";
 import type React from "react";
-import type { ResumeSetupMode, StepId, ValidationState } from "../types";
+import type { ResumeParsingMode, ResumeSetupMode, StepId, ValidationState } from "../types";
 import { BaseResumeStep } from "./BaseResumeStep";
 import { LlmConnectionStep } from "./LlmConnectionStep";
 import { SearchTermsStep } from "./SearchTermsStep";
@@ -39,7 +39,7 @@ export const OnboardingStepContent: React.FC<{
   onLlmBaseUrlChange: (value: string) => void;
   onLlmModelChange: (value: string) => void;
   onLlmProviderChange: (value: string) => void;
-  onImportResumeFile: (file: File) => Promise<void>;
+  onImportResumeFile: (file: File, parsingMode?: ResumeParsingMode) => Promise<void>;
   onRegenerateSearchTerms: () => Promise<void>;
   onRxresumeApiKeyChange: (value: string) => void;
   onRxresumeSelfHostedChange: (next: boolean) => void;
@@ -48,6 +48,8 @@ export const OnboardingStepContent: React.FC<{
   onSearchTermDraftChange: (value: string) => void;
   onSearchTermsChange: (values: string[]) => void;
   onTemplateResumeChange: (value: string | null) => void;
+  parsingMode?: ResumeParsingMode;
+  onParsingModeChange?: (mode: ResumeParsingMode) => void;
 }> = (props) => {
   if (props.currentStep === "llm") {
     return (
@@ -92,6 +94,8 @@ export const OnboardingStepContent: React.FC<{
         onRxresumeSelfHostedChange={props.onRxresumeSelfHostedChange}
         onRxresumeUrlChange={props.onRxresumeUrlChange}
         onTemplateResumeChange={props.onTemplateResumeChange}
+        parsingMode={props.parsingMode}
+        onParsingModeChange={props.onParsingModeChange}
       />
     );
   }

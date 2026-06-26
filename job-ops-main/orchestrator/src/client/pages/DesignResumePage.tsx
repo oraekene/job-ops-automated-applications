@@ -514,6 +514,7 @@ export const DesignResumePage: React.FC = () => {
     useState<DesignResumeMobileView>(() => (sectionParam ? "edit" : "preview"));
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [rendererUpdating, setRendererUpdating] = useState(false);
+  const [resumeParsingMode, setResumeParsingMode] = useState<"llm" | "offline">("llm");
   const [dirty, setDirty] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -729,6 +730,7 @@ export const DesignResumePage: React.FC = () => {
         fileName: file.name,
         mediaType: file.type || match[1],
         dataBase64: match[2],
+        parsingMode: resumeParsingMode,
       });
       setDesignResume(imported);
       setSaveState("saved");
@@ -1015,6 +1017,32 @@ export const DesignResumePage: React.FC = () => {
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
             <div className="hidden items-center gap-2 sm:flex">
+              <div className="flex items-center gap-1 rounded-md border px-1.5 py-1">
+                <button
+                  type="button"
+                  onClick={() => setResumeParsingMode("llm")}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
+                    resumeParsingMode === "llm"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  LLM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResumeParsingMode("offline")}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
+                    resumeParsingMode === "offline"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Offline
+                </button>
+              </div>
               <Button
                 type="button"
                 variant="outline"

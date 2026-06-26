@@ -280,6 +280,7 @@ export const createAppSettings = (
   backupMaxCount: { value: 7, default: 7, override: null },
   penalizeMissingSalary: { value: false, default: false, override: null },
   missingSalaryPenalty: { value: 10, default: 10, override: null },
+  resumeParsingMode: { value: "llm", default: "llm", override: null },
   autoSkipScoreThreshold: { value: null, default: null, override: null },
   autoApplicationEnabled: { value: false, default: false, override: null },
   autoApplicationDefaultCoverLetter: { value: "", default: "", override: null },

@@ -611,8 +611,10 @@ export function useOnboardingFlow() {
     }
   }, [settings, validateBaseResume]);
 
+  const [parsingMode, setParsingMode] = useState<"llm" | "offline">("llm");
+
   const handleImportResumeFile = useCallback(
-    async (file: File) => {
+    async (file: File, mode?: "llm" | "offline") => {
       try {
         setIsImportingResume(true);
         const dataUrl = await fileToDataUrl(file);
@@ -626,6 +628,7 @@ export function useOnboardingFlow() {
           fileName: file.name,
           mediaType: file.type || match[1],
           dataBase64: match[2],
+          parsingMode: mode ?? parsingMode,
         });
 
         queryClient.setQueryData(queryKeys.designResume.current(), document);
@@ -776,6 +779,8 @@ export function useOnboardingFlow() {
     demoMode,
     handleRxresumeSelfHostedChange,
     handleImportResumeFile,
+    parsingMode,
+    onParsingModeChange: setParsingMode,
     isBusy,
     isGeneratingSearchTerms,
     isImportingResume,

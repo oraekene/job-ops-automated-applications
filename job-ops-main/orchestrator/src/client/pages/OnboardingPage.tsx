@@ -148,6 +148,8 @@ export const OnboardingPage: React.FC = () => {
                       })
                     }
                     onImportResumeFile={flow.handleImportResumeFile}
+                    parsingMode={flow.parsingMode}
+                    onParsingModeChange={flow.onParsingModeChange}
                     onRegenerateSearchTerms={flow.handleRegenerateSearchTerms}
                     onResumeSetupModeChange={flow.setResumeSetupMode}
                     onRxresumeApiKeyChange={(value) =>

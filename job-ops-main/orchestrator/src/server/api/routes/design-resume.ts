@@ -203,6 +203,7 @@ const importFileSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   mediaType: z.string().trim().min(1).max(200).optional(),
   dataBase64: z.string().trim().min(1),
+  parsingMode: z.enum(["llm", "offline"]).nullable().optional(),
 });
 
 export const designResumeAiFieldSuggestionSchema = z.object({

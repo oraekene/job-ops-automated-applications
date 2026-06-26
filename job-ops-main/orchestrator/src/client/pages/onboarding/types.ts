@@ -20,6 +20,7 @@ export type OnboardingFormData = {
 
 export type StepId = "llm" | "baseresume" | "searchterms";
 export type ResumeSetupMode = "upload" | "rxresume";
+export type ResumeParsingMode = "llm" | "offline";
 
 export type OnboardingStep = {
   id: StepId;

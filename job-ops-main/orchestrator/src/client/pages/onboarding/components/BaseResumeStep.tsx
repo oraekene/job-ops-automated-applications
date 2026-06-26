@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import type { ResumeSetupMode, ValidationState } from "../types";
+import type { ResumeParsingMode, ResumeSetupMode, ValidationState } from "../types";
 import { InlineValidation } from "./InlineValidation";
 import { RxResumeStep } from "./RxResumeStep";
 
@@ -21,12 +21,14 @@ export const BaseResumeStep: React.FC<{
   rxresumeApiKeyHint: string | null | undefined;
   rxresumeUrl: string;
   rxresumeValidation: ValidationState;
-  onImportResumeFile: (file: File) => Promise<void>;
+  onImportResumeFile: (file: File, parsingMode?: ResumeParsingMode) => Promise<void>;
   onResumeSetupModeChange: (mode: ResumeSetupMode) => void;
   onRxresumeApiKeyChange: (value: string) => void;
   onRxresumeSelfHostedChange: (next: boolean) => void;
   onRxresumeUrlChange: (value: string) => void;
   onTemplateResumeChange: (value: string | null) => void;
+  parsingMode?: ResumeParsingMode;
+  onParsingModeChange?: (mode: ResumeParsingMode) => void;
 }> = ({
   baseResumeValidation,
   baseResumeValue,
@@ -46,6 +48,8 @@ export const BaseResumeStep: React.FC<{
   onRxresumeSelfHostedChange,
   onRxresumeUrlChange,
   onTemplateResumeChange,
+  parsingMode,
+  onParsingModeChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,7 +63,7 @@ export const BaseResumeStep: React.FC<{
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           if (file) {
-            void onImportResumeFile(file);
+            void onImportResumeFile(file, parsingMode);
           }
           event.currentTarget.value = "";
         }}
@@ -125,11 +129,43 @@ export const BaseResumeStep: React.FC<{
                 Upload a PDF or DOCX resume
               </div>
               <p className="text-sm text-muted-foreground">
-                Job Ops will send the file directly to your configured AI model
-                and store the validated structured result as your local Design
-                Resume.
+                {parsingMode === "offline"
+                  ? "Job Ops will extract text locally and parse it into a structured resume without sending it to an AI model."
+                  : "Job Ops will send the file directly to your configured AI model and store the validated structured result as your local Design Resume."}
               </p>
             </div>
+
+            {onParsingModeChange && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Parse mode:</span>
+                <div className="flex overflow-hidden rounded-md border">
+                  <button
+                    type="button"
+                    onClick={() => onParsingModeChange("llm")}
+                    className={cn(
+                      "px-2.5 py-1 text-xs transition-colors",
+                      parsingMode === "llm"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-transparent text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    LLM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onParsingModeChange("offline")}
+                    className={cn(
+                      "px-2.5 py-1 text-xs transition-colors",
+                      parsingMode === "offline"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-transparent text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    Offline
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button

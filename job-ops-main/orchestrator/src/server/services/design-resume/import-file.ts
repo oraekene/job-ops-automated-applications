@@ -14,6 +14,7 @@ import {
 import { GeminiCliClient } from "@server/services/llm/gemini-cli/client";
 import type { JsonSchemaDefinition } from "@server/services/llm/types";
 import { resolveLlmRuntimeSettings } from "@server/services/modelSelection";
+import { getEffectiveSettings } from "@server/services/settings";
 import { normalizeReactiveResumeV5Document } from "@server/services/rxresume/document";
 import {
   getResumeSchemaValidationMessage,
@@ -24,6 +25,7 @@ import type { DesignResumeDocument, DesignResumeJson } from "@shared/types";
 import { jsonrepair } from "jsonrepair";
 import { buildHeaders, getResponseDetail, joinUrl } from "../llm/utils/http";
 import { parseErrorMessage, truncate } from "../llm/utils/string";
+import { parseResumeOffline } from "./offline-parser";
 import { replaceCurrentDesignResumeDocument } from "./index";
 
 type SupportedImportMediaType =
@@ -65,11 +67,12 @@ type ResumeImportFileInput = {
   fileName: string;
   mediaType?: string | null;
   dataBase64: string;
+  parsingMode?: "llm" | "offline" | null;
 };
 
 const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 const OPENAI_DEFAULT_TIMEOUT_MS = 60_000;
-const OPENAI_COMPATIBLE_TIMEOUT_MS = 180_000;
+const OPENAI_COMPATIBLE_TIMEOUT_MS = 300_000;
 const OPENROUTER_DEFAULT_TIMEOUT_MS = 90_000;
 const GEMINI_DEFAULT_TIMEOUT_MS = 90_000;
 
@@ -549,6 +552,30 @@ async function extractPdfText(decoded: Buffer): Promise<string> {
       throw error;
     }
     throw badRequest("Resume PDF file could not be read or is encrypted.");
+  }
+}
+
+async function extractPdfLinks(decoded: Buffer): Promise<string[]> {
+  try {
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = pdfjsLib.getDocument({ data: decoded.buffer as ArrayBuffer });
+    const pdf = await loadingTask.promise;
+    const links = new Set<string>();
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const annotations = await page.getAnnotations();
+      for (const anno of annotations) {
+        if (anno.subtype === "Link" && typeof anno.url === "string") {
+          links.add(anno.url);
+        }
+      }
+    }
+
+    await pdf.destroy();
+    return [...links];
+  } catch {
+    return [];
   }
 }
 
@@ -1323,6 +1350,38 @@ export async function importDesignResumeFromFile(
   }
 
   try {
+    const settings = await getEffectiveSettings();
+    const parsingMode = input.parsingMode ?? settings.resumeParsingMode.value;
+
+    if (parsingMode === "offline") {
+      let documentText: string | null = null;
+      if (mediaType === "application/pdf") {
+        documentText = await extractPdfText(decoded);
+      } else if (mediaType === DOCX_MIME) {
+        documentText = await extractResumeDocxText(decoded);
+      }
+      if (!documentText) {
+        throw badRequest(
+          "Resume text extraction returned empty content. The file may be scanned or encrypted.",
+        );
+      }
+      const documentLinks = await extractPdfLinks(decoded);
+      const resumeJson = await parseResumeOffline(documentText, documentLinks);
+      const saved = await replaceCurrentDesignResumeDocument({
+        importedAt: new Date().toISOString(),
+        resumeJson,
+        sourceMode: null,
+        sourceResumeId: null,
+      });
+      logger.info("Design resume file import completed (offline)", {
+        requestId: requestId ?? null,
+        fileName,
+        mediaType,
+        documentId: saved.id,
+      });
+      return saved;
+    }
+
     let documentText: string | null =
       mediaType === DOCX_MIME ? await extractResumeDocxText(decoded) : null;
     if (isGeminiCli && mediaType === "application/pdf") {

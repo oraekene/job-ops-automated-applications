@@ -976,6 +976,18 @@ export const settingsRegistry = {
     target: "searchCities" as const,
   },
 
+  resumeParsingMode: {
+    kind: "typed" as const,
+    schema: z.enum(["llm", "offline"]),
+    default: (): "llm" | "offline" => "llm",
+    parse: (raw: string | undefined): "llm" | "offline" | null => {
+      if (raw === "llm" || raw === "offline") return raw;
+      return null;
+    },
+    serialize: (value: "llm" | "offline" | null | undefined): string | null =>
+      value ?? null,
+  },
+
   // --- Virtual ---
   enableBasicAuth: {
     kind: "virtual" as const,

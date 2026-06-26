@@ -249,6 +249,7 @@ export interface AppSettings {
   autoApplicationDefaultCoverLetter: Resolved<string>;
   autoApplicationSalaryRequirement: Resolved<string>;
   autoApplicationPdfMaxAgeDays: Resolved<number>;
+  resumeParsingMode: Resolved<"llm" | "offline">;
 
   // Model variants (no own default, fallback to model.value):
   modelScorer: ModelResolved;

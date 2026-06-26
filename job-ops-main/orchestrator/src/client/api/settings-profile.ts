@@ -66,6 +66,7 @@ export async function importDesignResumeFromFile(input: {
   fileName: string;
   mediaType?: string;
   dataBase64: string;
+  parsingMode?: "llm" | "offline" | null;
 }): Promise<DesignResumeDocument> {
   return fetchApi<DesignResumeDocument>("/design-resume/import/file", {
     method: "POST",
