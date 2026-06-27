@@ -100,6 +100,7 @@ Rules:
 - Always populate website.url fields when URLs are visible in the resume text.
 - When you see a platform name like "Github", "LinkedIn", "Replit", "Dune", "Portfolio", "Personal Site", "Website", "Blog", or similar as a label, construct the most likely URL from the resume context. For example, if you see "Github" and a username elsewhere in the resume, use "https://github.com/{username}". If you see "LinkedIn", use "https://linkedin.com/in/{username}". Map these to the appropriate website.url fields in the profiles section.
 - Place all platform links (Github, LinkedIn, Replit, Dune, portfolio, etc.) in the sections.profiles.items array with the appropriate network name and constructed URL.
+- The text contains [Page Links: ...] markers that show actual hyperlinks from each page of the PDF. Use these URLs for the corresponding items. For projects, experience, education, and other section items, each item should get its own specific URL from the page where it appears. Do NOT reuse the same URL across multiple projects unless it truly belongs to all of them.
 `.trim();
 
 type RecordLike = Record<string, unknown>;
@@ -569,25 +570,83 @@ async function extractPdfText(decoded: Buffer): Promise<string> {
   }
 }
 
-async function extractPdfLinks(decoded: Buffer): Promise<string[]> {
+async function extractPdfTextWithLinks(decoded: Buffer): Promise<string> {
   try {
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const loadingTask = pdfjsLib.getDocument({ data: decoded.buffer as ArrayBuffer });
     const pdf = await loadingTask.promise;
-    const links = new Set<string>();
+    const pageBlocks: string[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: { str?: string }) => item.str ?? "")
+        .join(" ");
+
+      const annotations = await page.getAnnotations();
+      const pageLinks: string[] = [];
+      const seen = new Set<string>();
+      for (const anno of annotations) {
+        if (anno.subtype !== "Link") continue;
+        const url = (anno as Record<string, unknown>).url ?? (anno as Record<string, unknown>).action?.url ?? (anno as Record<string, unknown>).a?.url;
+        if (typeof url === "string" && url.startsWith("http")) {
+          const lower = url.toLowerCase();
+          if (!seen.has(lower)) {
+            seen.add(lower);
+            pageLinks.push(url);
+          }
+        }
+      }
+
+      let block = pageText.trim();
+      if (pageLinks.length > 0) {
+        block += `\n[Page Links: ${pageLinks.join(", ")}]`;
+      }
+      pageBlocks.push(block);
+    }
+
+    await pdf.destroy();
+    const text = pageBlocks.join("\n\n").trim();
+
+    if (!text) {
+      throw badRequest("Resume PDF did not contain readable text.");
+    }
+    return text;
+  } catch (error) {
+    if (error instanceof AppError && error.status === 400) {
+      throw error;
+    }
+    throw badRequest("Resume PDF file could not be read or is encrypted.");
+  }
+}
+
+async function extractPdfLinks(decoded: Buffer): Promise<{ page: number; url: string }[]> {
+  try {
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = pdfjsLib.getDocument({ data: decoded.buffer as ArrayBuffer });
+    const pdf = await loadingTask.promise;
+    const links: { page: number; url: string }[] = [];
+    const seen = new Set<string>();
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const annotations = await page.getAnnotations();
       for (const anno of annotations) {
-        if (anno.subtype === "Link" && typeof anno.url === "string") {
-          links.add(anno.url);
+        if (anno.subtype !== "Link") continue;
+        const url = (anno as Record<string, unknown>).url ?? (anno as Record<string, unknown>).action?.url ?? (anno as Record<string, unknown>).a?.url;
+        if (typeof url === "string" && url.startsWith("http")) {
+          const lower = url.toLowerCase();
+          if (!seen.has(lower)) {
+            seen.add(lower);
+            links.push({ page: i, url });
+          }
         }
       }
     }
 
     await pdf.destroy();
-    return [...links];
+    return links;
   } catch {
     return [];
   }
@@ -1005,7 +1064,7 @@ async function extractWithOpenAiCompatible(args: {
   if (args.documentText) {
     const detectedUrls = extractUrlsFromText(args.documentText);
     if (detectedUrls.length > 0) {
-      promptText += `\n\nDetected URLs in resume text:\n${detectedUrls.map((u) => `- ${u}`).join("\n")}\n\nMap these URLs to the correct website.url fields in the JSON output. Use the full URL with https:// prefix.`;
+      promptText += `\n\nURLs found in this resume:\n${detectedUrls.map((u) => `- ${u}`).join("\n")}\n\nEach section item (project, job, education, profile, etc.) should use its own specific URL. Match each URL to the item it belongs to based on proximity in the text. Do NOT reuse the same URL across multiple different items.`;
     }
   }
 
@@ -1402,15 +1461,11 @@ export async function importDesignResumeFromFile(
       documentText = await extractPdfText(decoded);
     }
     if (provider === "openai_compatible" && mediaType === "application/pdf") {
-      documentText = await extractPdfText(decoded);
+      documentText = await extractPdfTextWithLinks(decoded);
       if (!documentText) {
         throw badRequest(
           "Resume PDF text extraction returned empty content. The file may be scanned or encrypted.",
         );
-      }
-      const documentLinks = await extractPdfLinks(decoded);
-      if (documentLinks.length > 0) {
-        documentText += `\n\nPDF Hyperlinks:\n${documentLinks.map((u) => `- ${u}`).join("\n")}`;
       }
       logger.info("PDF text extracted for openai_compatible provider", {
         requestId: requestId ?? null,

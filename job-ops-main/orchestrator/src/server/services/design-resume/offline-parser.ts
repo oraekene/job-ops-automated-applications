@@ -307,13 +307,14 @@ function parseProjects(lines: string[]): Array<{
   return items;
 }
 
-export async function parseResumeOffline(text: string, links: string[]): Promise<DesignResumeJson> {
+export async function parseResumeOffline(text: string, links: { page: number; url: string }[]): Promise<DesignResumeJson> {
   const lines = text.split("\n");
   const nonEmptyLines = lines.map((l) => l.trim()).filter(Boolean);
   const headings = findSectionHeadings(lines);
 
   const rawText = text;
-  const allUrls = [...new Set([...parseUrls(text), ...links])];
+  const linkUrls = links.map((l) => l.url);
+  const allUrls = [...new Set([...parseUrls(text), ...linkUrls])];
 
   const name = detectName(nonEmptyLines);
   const email = parseEmail(text);
