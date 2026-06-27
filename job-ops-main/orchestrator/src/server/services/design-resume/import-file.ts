@@ -540,9 +540,23 @@ ${JSON.stringify(template, null, 2)}
 
 async function extractPdfText(decoded: Buffer): Promise<string> {
   try {
-    const { default: pdfParse } = await import("pdf-parse");
-    const data = (await pdfParse(decoded)) as { text?: string };
-    const text = typeof data?.text === "string" ? data.text.trim() : "";
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = pdfjsLib.getDocument({ data: decoded.buffer as ArrayBuffer });
+    const pdf = await loadingTask.promise;
+    const textParts: string[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: { str?: string }) => item.str ?? "")
+        .join(" ");
+      textParts.push(pageText);
+    }
+
+    await pdf.destroy();
+    const text = textParts.join("\n\n").trim();
+
     if (!text) {
       throw badRequest("Resume PDF did not contain readable text.");
     }
@@ -1393,6 +1407,10 @@ export async function importDesignResumeFromFile(
         throw badRequest(
           "Resume PDF text extraction returned empty content. The file may be scanned or encrypted.",
         );
+      }
+      const documentLinks = await extractPdfLinks(decoded);
+      if (documentLinks.length > 0) {
+        documentText += `\n\nPDF Hyperlinks:\n${documentLinks.map((u) => `- ${u}`).join("\n")}`;
       }
       logger.info("PDF text extracted for openai_compatible provider", {
         requestId: requestId ?? null,

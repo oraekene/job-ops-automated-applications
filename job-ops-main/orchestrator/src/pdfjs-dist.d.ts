@@ -4,7 +4,17 @@ declare module "pdfjs-dist/legacy/build/pdf.mjs" {
     url?: string;
   }
 
+  interface PdfTextItem {
+    str?: string;
+    transform: number[];
+  }
+
+  interface PdfTextContent {
+    items: PdfTextItem[];
+  }
+
   interface PdfPage {
+    getTextContent(): Promise<PdfTextContent>;
     getAnnotations(): Promise<PdfAnnotation[]>;
   }
 

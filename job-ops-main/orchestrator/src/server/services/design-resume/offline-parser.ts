@@ -5,18 +5,18 @@ type SectionHeading = {
   lineIndex: number;
 };
 
-const SECTION_HEADINGS = [
-  /^(?:professional\s+)?(?:work\s+)?(?:experience|employment|history|career)/im,
-  /^(?:education|academic|training|qualifications?)/im,
-  /^(?:skills?|technical\s+skills?|core\s+competencies?|expertise|technologies)/im,
-  /^(?:projects?|side\s+projects?|open\s+source)/im,
-  /^(?:certifications?|licenses?|professional\s+certifications?)/im,
-  /^(?:publications?|research|papers?)/im,
-  /^(?:awards?|honors?|achievements?|recognition)/im,
-  /^(?:languages?)/im,
-  /^(?:interests?|volunteer(?:ing)?|community)/im,
-  /^(?:references?)/im,
-  /^(?:summary|profile|objective|about\s+me)/im,
+const SECTION_PATTERNS = [
+  { label: "experience", patterns: [/^(?:professional\s+)?(?:work\s+)?(?:experience|employment|history|career)/im] },
+  { label: "education", patterns: [/^(?:education|academic|training|qualifications?)/im] },
+  { label: "skills", patterns: [/^(?:skills?|technical\s+skills?|core\s+competencies?|expertise|technologies)/im] },
+  { label: "projects", patterns: [/^(?:projects?|side\s+projects?|open\s+source)/im] },
+  { label: "certifications", patterns: [/^(?:certifications?|licenses?|professional\s+certifications?)/im] },
+  { label: "publications", patterns: [/^(?:publications?|research|papers?)/im] },
+  { label: "awards", patterns: [/^(?:awards?|honors?|achievements?|recognition)/im] },
+  { label: "languages", patterns: [/^(?:languages?)/im] },
+  { label: "interests", patterns: [/^(?:interests?|volunteer(?:ing)?|community)/im] },
+  { label: "references", patterns: [/^(?:references?)/im] },
+  { label: "summary", patterns: [/^(?:summary|profile|objective|about\s+me)/im] },
 ];
 
 function findSectionHeadings(lines: string[]): SectionHeading[] {
@@ -24,13 +24,9 @@ function findSectionHeadings(lines: string[]): SectionHeading[] {
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     if (!trimmed) continue;
-    const isShortLine = trimmed.length < 60;
-    const hasColon = trimmed.endsWith(":");
-    const isAllCaps = trimmed === trimmed.toUpperCase() && trimmed.length > 2;
-    if (!isShortLine && !isAllCaps && !hasColon) continue;
-    for (const pattern of SECTION_HEADINGS) {
-      if (pattern.test(trimmed)) {
-        headings.push({ label: trimmed.replace(/:$/, "").trim(), lineIndex: i });
+    for (const entry of SECTION_PATTERNS) {
+      if (entry.patterns.some((p) => p.test(trimmed))) {
+        headings.push({ label: entry.label, lineIndex: i });
         break;
       }
     }
@@ -45,7 +41,7 @@ function getSectionLines(lines: string[], headings: SectionHeading[], idx: numbe
 }
 
 function parseEmail(text: string): string {
-  const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match?.[0] ?? "";
 }
 
@@ -55,7 +51,7 @@ function parsePhone(text: string): string {
 }
 
 function parseUrls(text: string): string[] {
-  const pattern = /(?:https?:\/\/[^\s,;)\]}>]+|(?<![\/\\])[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|dev|co|me|info|edu|gov)(?:\/[^\s,;)\]}>]*)?)/gi;
+  const pattern = /(?:https?:\/\/[^\s,;)\]}>!]+|(?<![\/\\])[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|dev|co|me|info|edu|gov)(?:\/[^\s,;)\]}>!]*)?)/gi;
   const matches = text.match(pattern) ?? [];
   const unique = new Set<string>();
   const urls: string[] = [];
@@ -74,16 +70,18 @@ function parseUrls(text: string): string[] {
 }
 
 function detectName(lines: string[]): string {
-  const firstLine = lines[0]?.trim();
-  if (firstLine && firstLine.length > 1 && firstLine.length < 60 && !firstLine.includes("@")) {
-    return firstLine;
+  for (let i = 0; i < Math.min(3, lines.length); i++) {
+    const line = lines[i]?.trim();
+    if (line && line.length > 1 && line.length < 60 && !line.includes("@") && !line.includes("http")) {
+      return line;
+    }
   }
   return "";
 }
 
 function detectLocation(text: string): string {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  for (let i = 1; i < Math.min(5, lines.length); i++) {
+  for (let i = 1; i < Math.min(8, lines.length); i++) {
     const line = lines[i];
     if (/[A-Z][a-z]+(?:,\s*[A-Z]{2})/.test(line)) {
       return line;
@@ -94,12 +92,18 @@ function detectLocation(text: string): string {
 
 function detectHeadline(text: string): string {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  for (let i = 1; i < Math.min(5, lines.length); i++) {
+  for (let i = 1; i < Math.min(8, lines.length); i++) {
     const line = lines[i];
-    if (line.length > 10 && line.length < 120 && !line.includes("@") && !/[A-Z][a-z]+,\s*[A-Z]{2}/.test(line)) {
+    if (line.length > 10 && line.length < 120 && !line.includes("@") && !/[A-Z][a-z]+,\s*[A-Z]{2}/.test(line) && !line.includes("http")) {
       return line;
     }
   }
+  return "";
+}
+
+function findLatestDateOrPresent(text: string): string {
+  const match = text.match(/(\d{4})\s*[-–]\s*(Present|Current|Now|\d{4})/i);
+  if (match) return match[0];
   return "";
 }
 
@@ -107,21 +111,21 @@ function parseExperience(lines: string[]): Array<{
   company: string;
   position: string;
   location: string;
-  period: { start: string; end: string };
+  period: string;
   description: string;
 }> {
   const items: Array<{
     company: string;
     position: string;
     location: string;
-    period: { start: string; end: string };
+    period: string;
     description: string;
   }> = [];
   let current: {
     company: string;
     position: string;
     location: string;
-    period: { start: string; end: string };
+    period: string;
     description: string;
   } | null = null;
   const descParts: string[] = [];
@@ -129,29 +133,31 @@ function parseExperience(lines: string[]): Array<{
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const orgMatch = trimmed.match(/^([A-Z][A-Za-z0-9\s&.,-]+?)\s*[|]\s*(.+)/);
-    const periodMatch = trimmed.match(/(\w+\s+\d{4})\s*[-–]\s*(\w+\s+\d{4}|Present|Current|Now)/i);
-    if (orgMatch && periodMatch) {
+
+    const periodMatch = trimmed.match(/(\w+(?:\.)?\s+\d{4})\s*[-–]\s*(\w+(?:\.)?\s+\d{4}|Present|Current|Now)/i);
+    const hasOrgIndicator = /^[A-Z][A-Za-z0-9\s&.,'/-]{2,50}$/.test(trimmed) && periodMatch;
+
+    const companyOnlyMatch = /^([A-Z][A-Za-z0-9\s&.,'/-]{2,50})\s*$/.test(trimmed) && /\d{4}/.test(trimmed);
+
+    if (periodMatch) {
       if (current) {
         current.description = descParts.join("\n").trim();
         items.push(current);
         descParts.length = 0;
       }
       current = {
-        company: orgMatch[1].trim(),
-        position: orgMatch[2].trim(),
-        location: "",
-        period: { start: periodMatch[1], end: periodMatch[2] },
-        description: "",
-      };
-    } else if (periodMatch && !current) {
-      current = {
-        company: "",
+        company: trimmed,
         position: "",
         location: "",
-        period: { start: periodMatch[1], end: periodMatch[2] },
+        period: periodMatch[0],
         description: "",
       };
+
+      const pipeMatch = trimmed.match(/^([A-Za-z0-9\s&.,'/-]+?)\s*[|]\s*(.+)/);
+      if (pipeMatch) {
+        current.company = pipeMatch[1].trim();
+        current.position = pipeMatch[2].trim().replace(periodMatch[0], "").replace(/[-–]\s*$/, "").trim();
+      }
     } else if (current) {
       descParts.push(trimmed);
     }
@@ -175,23 +181,58 @@ function parseEducation(lines: string[]): Array<{
     area: string;
     period: { start: string; end: string };
   }> = [];
+
+  let currentSchool: string | null = null;
+  let currentDegree = "";
+  let currentArea = "";
+  let currentPeriod: { start: string; end: string } = { start: "", end: "" };
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+
     const periodMatch = trimmed.match(/(\d{4})\s*[-–]\s*(\d{4}|Present|Current)/i);
-    const schoolMatch = trimmed.match(/([A-Z][A-Za-z\s&.]+(?:University|College|Institute|School|Academy))/);
-    if (schoolMatch) {
-      items.push({
-        school: schoolMatch[1].trim(),
-        degree: "",
-        area: "",
-        period: {
-          start: periodMatch?.[1] ?? "",
-          end: periodMatch?.[2] ?? "",
-        },
-      });
+    const schoolKeywords = /(University|College|Institute|School|Academy|Polytechnic)/i;
+    const schoolMatch = schoolKeywords.test(trimmed);
+
+    if (schoolMatch && trimmed.length < 80) {
+      if (currentSchool) {
+        items.push({
+          school: currentSchool,
+          degree: currentDegree,
+          area: currentArea,
+          period: currentPeriod,
+        });
+        currentDegree = "";
+        currentArea = "";
+        currentPeriod = { start: "", end: "" };
+      }
+      currentSchool = trimmed.replace(periodMatch?.[0] ?? "", "").trim();
+      if (periodMatch) {
+        currentPeriod = { start: periodMatch[1], end: periodMatch[2] };
+      }
+    } else if (currentSchool) {
+      const degreeMatch = trimmed.match(/^(B\.?[A-Z]\.?|M\.?[A-Z]\.?|Ph\.?D|Bachelor|Master|Doctor|Associate|MBA|BS|BA|MS|MA)/i);
+      if (degreeMatch) {
+        currentDegree = trimmed.replace(periodMatch?.[0] ?? "", "").trim();
+        if (periodMatch) {
+          currentPeriod = { start: periodMatch[1], end: periodMatch[2] };
+        }
+      } else if (!periodMatch) {
+        currentArea = currentArea ? `${currentArea}, ${trimmed}` : trimmed;
+      }
     }
   }
+
+  if (currentSchool) {
+    items.push({
+      school: currentSchool,
+      degree: currentDegree,
+      area: currentArea,
+      period: currentPeriod,
+    });
+  }
+
   return items;
 }
 
@@ -200,10 +241,70 @@ function parseSkills(lines: string[]): string[] {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const parts = trimmed.split(/[,|•\n]+/).map((s) => s.trim()).filter(Boolean);
-    all.push(...parts);
+    const parts = trimmed.split(/[,;|•\n]+/).map((s) => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (part.length > 1 && !part.startsWith("http") && !part.includes("@")) {
+        all.push(part);
+      }
+    }
   }
   return all;
+}
+
+function parseProjects(lines: string[]): Array<{
+  name: string;
+  period: string;
+  description: string;
+  website: string;
+}> {
+  const items: Array<{
+    name: string;
+    period: string;
+    description: string;
+    website: string;
+  }> = [];
+  let current: {
+    name: string;
+    period: string;
+    description: string;
+    website: string;
+  } | null = null;
+  const descParts: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const periodMatch = trimmed.match(/(\w+(?:\.)?\s+\d{4})\s*[-–]\s*(\w+(?:\.)?\s+\d{4}|Present|Current|Now)/i);
+    const urlInLine = parseUrls(trimmed);
+
+    if (periodMatch && trimmed.length < 100) {
+      if (current) {
+        current.description = descParts.join("\n").trim();
+        items.push(current);
+        descParts.length = 0;
+      }
+      current = {
+        name: trimmed.replace(periodMatch[0], "").replace(/[-–]\s*$/, "").trim(),
+        period: periodMatch[0],
+        description: "",
+        website: urlInLine[0] ?? "",
+      };
+    } else if (urlInLine.length > 0 && current) {
+      if (!current.website) {
+        current.website = urlInLine[0];
+      }
+      descParts.push(trimmed);
+    } else if (current) {
+      descParts.push(trimmed);
+    }
+  }
+
+  if (current) {
+    current.description = descParts.join("\n").trim();
+    items.push(current);
+  }
+  return items;
 }
 
 export async function parseResumeOffline(text: string, links: string[]): Promise<DesignResumeJson> {
@@ -220,8 +321,8 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
   const location = detectLocation(text);
   const headline = detectHeadline(text);
 
-  const profileUrl = allUrls.find((u) => u.includes("linkedin.com")) ?? "";
-  const githubUrl = allUrls.find((u) => u.includes("github.com")) ?? "";
+  const profileUrl = allUrls.find((u) => /linkedin\.com/i.test(u)) ?? "";
+  const githubUrl = allUrls.find((u) => /github\.com/i.test(u)) ?? "";
 
   const profiles: Array<{
     id: string;
@@ -236,7 +337,7 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
       id: "linkedin",
       hidden: false,
       network: "LinkedIn",
-      username: profileUrl.split("/").pop() ?? "",
+      username: profileUrl.split("/").filter(Boolean).pop() ?? "",
       website: { url: profileUrl, label: "LinkedIn" },
       icon: "",
     });
@@ -246,27 +347,33 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
       id: "github",
       hidden: false,
       network: "GitHub",
-      username: githubUrl.split("/").pop() ?? "",
+      username: githubUrl.split("/").filter(Boolean).pop() ?? "",
       website: { url: githubUrl, label: "GitHub" },
       icon: "",
     });
   }
 
+  const otherUrls = allUrls.filter((u) => !/linkedin\.com/i.test(u) && !/github\.com/i.test(u));
+  const basicsWebsite = otherUrls.length > 0 ? { url: otherUrls[0], label: "" } : { url: "", label: "" };
+
   let expLines: string[] = [];
   let eduLines: string[] = [];
   let skillsLines: string[] = [];
+  let projectsLines: string[] = [];
   let summaryText = "";
 
   for (let i = 0; i < headings.length; i++) {
     const h = headings[i];
     const sectionLines = getSectionLines(lines, headings, i);
-    if (/experience|employment|history/i.test(h.label)) {
+    if (h.label === "experience") {
       expLines = sectionLines;
-    } else if (/education|academic/i.test(h.label)) {
+    } else if (h.label === "education") {
       eduLines = sectionLines;
-    } else if (/skills?|competenc|technical/i.test(h.label)) {
+    } else if (h.label === "skills") {
       skillsLines = sectionLines;
-    } else if (/summary|profile|objective/i.test(h.label)) {
+    } else if (h.label === "projects") {
+      projectsLines = sectionLines;
+    } else if (h.label === "summary") {
       summaryText = sectionLines.join("\n").trim();
     }
   }
@@ -277,7 +384,7 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
     company: item.company,
     position: item.position,
     location: item.location,
-    period: { start: item.period.start, end: item.period.end },
+    period: { start: "", end: "" },
     website: { url: "", label: "" },
     description: item.description,
     roles: [] as Array<{ id: string; position: string; period: { start: string; end: string }; description: string }>,
@@ -306,6 +413,16 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
     icon: "",
   }));
 
+  const projects = parseProjects(projectsLines).map((item, idx) => ({
+    id: `proj-${idx}`,
+    hidden: false,
+    name: item.name,
+    period: item.period,
+    website: { url: item.website, label: item.name },
+    description: item.description,
+    options: { showLinkInTitle: false },
+  }));
+
   const result: DesignResumeJson = {
     picture: {
       hidden: true,
@@ -325,7 +442,7 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
       email,
       phone,
       location,
-      website: { url: "", label: "" },
+      website: basicsWebsite,
       customFields: [],
     },
     summary: {
@@ -353,6 +470,12 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
         hidden: false,
         items: education,
       },
+      projects: {
+        title: "Projects",
+        columns: 1,
+        hidden: false,
+        items: projects,
+      },
       skills: {
         title: "Skills",
         columns: 1,
@@ -366,14 +489,13 @@ export async function parseResumeOffline(text: string, links: string[]): Promise
       publications: { title: "Publications", columns: 1, hidden: true, items: [] },
       volunteer: { title: "Volunteer", columns: 1, hidden: true, items: [] },
       references: { title: "References", columns: 1, hidden: true, items: [] },
-      projects: { title: "Projects", columns: 1, hidden: true, items: [] },
     },
     customSections: [],
     metadata: {
       template: "onyx",
       layout: {
         sidebarWidth: 35,
-        pages: [{ fullWidth: false, main: ["summary", "experience", "education", "skills"], sidebar: ["profiles"] }],
+        pages: [{ fullWidth: false, main: ["summary", "experience", "education", "projects", "skills"], sidebar: ["profiles"] }],
       },
       css: { enabled: false, value: "" },
       page: {
