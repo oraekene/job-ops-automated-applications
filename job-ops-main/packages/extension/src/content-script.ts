@@ -5,9 +5,18 @@ import { uploadResume } from "./drivers/shared/file-injector";
 import { detectBlocker } from "./lib/detect-blocker";
 import type { JobopsResult, PayloadResponse } from "./lib/jobops-api";
 import { ApiError, JobOpsApi, NetworkError } from "./lib/jobops-api";
+import { getSettings, type ExtensionSettings } from "./lib/storage";
 
-const API_BASE = "http://localhost:3001";
-const api = new JobOpsApi(API_BASE);
+let api: JobOpsApi;
+let settings: ExtensionSettings | null = null;
+
+async function ensureApi(): Promise<JobOpsApi> {
+  if (!api) {
+    settings = await getSettings();
+    api = new JobOpsApi(settings.serverUrl || "http://localhost:3001");
+  }
+  return api;
+}
 
 let panelShadow: ShadowRoot | null = null;
 
@@ -66,7 +75,7 @@ function showReadyPanel(jobTitle: string, employer: string, score?: number) {
     ${employer ? `<div style="margin-bottom:8px;color:#666;font-size:13px;">${escapeHtml(employer)}</div>` : ""}
     ${score !== undefined ? `<div style="margin-bottom:8px;"><span style="font-size:13px;color:#666;">Fit Score: </span><span style="font-weight:600;color:${score >= 70 ? "#2e7d32" : score >= 40 ? "#e65100" : "#c62828"};">${score}/100</span></div>` : ""}
     <button id="fill-btn" style="width:100%;padding:10px;background:#1976d2;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;">Fill Application</button>
-    <div style="margin-top:8px;font-size:11px;color:#999;text-align:center;">Requires JobOps server on localhost:3005</div>
+    <div style="margin-top:8px;font-size:11px;color:#999;text-align:center;">Powered by JobOps</div>
   `,
     "Ready",
     "#e3f2fd",
@@ -226,7 +235,8 @@ export async function runDoFill(): Promise<void> {
 
   let payload: PayloadResponse;
   try {
-    payload = await api.buildPayload(jobId, atsType, customQuestions);
+    const jApi = await ensureApi();
+    payload = await jApi.buildPayload(jobId, atsType, customQuestions);
   } catch (err) {
     if (err instanceof ApiError) {
       if (err.status === 404) {
@@ -649,6 +659,9 @@ async function main() {
     return;
   }
 
+  const jApi = await ensureApi();
+  const serverUrl = settings?.serverUrl || "http://localhost:3001";
+
   const FORCE_PANEL_TIMEOUT = 5000;
   let panelShown = false;
 
@@ -661,8 +674,8 @@ async function main() {
   }, FORCE_PANEL_TIMEOUT);
 
   try {
-    console.log("JobOps: calling server at", API_BASE);
-    const prep = await api.prepJob(url, atsType);
+    console.log("JobOps: calling server at", serverUrl);
+    const prep = await jApi.prepJob(url, atsType);
     if (panelShown) return;
     panelShown = true;
     console.log("JobOps: server responded", prep);
@@ -671,6 +684,14 @@ async function main() {
       prep.job?.employer || "",
       prep.job?.suitabilityScore,
     );
+
+    if (settings?.autoApplyEnabled) {
+      console.log("JobOps: auto-apply enabled, filling automatically");
+      setTimeout(doFill, 500);
+    } else if (settings?.autoFill !== false) {
+      console.log("JobOps: auto-fill enabled, filling automatically");
+      setTimeout(doFill, 500);
+    }
   } catch (err) {
     if (panelShown) return;
     panelShown = true;

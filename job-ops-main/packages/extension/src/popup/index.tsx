@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { JobOpsApi } from "../lib/jobops-api";
 import { getSettings, setSettings } from "../lib/storage";
 
-const API_BASE = "http://localhost:3005";
+const API_BASE = "http://localhost:3001";
 const api = new JobOpsApi(API_BASE);
 
 interface QueueStatus {
@@ -12,7 +12,7 @@ interface QueueStatus {
 }
 
 function Popup() {
-  const [serverUrl, setServerUrl] = useState("http://localhost:3005");
+  const [serverUrl, setServerUrl] = useState("http://localhost:3001");
   const [autoFill, setAutoFill] = useState(true);
   const [autoApply, setAutoApply] = useState(false);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
