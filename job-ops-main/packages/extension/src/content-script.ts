@@ -147,13 +147,30 @@ function doFill() {
   void runDoFill();
 }
 
-export function extractJobIdFromUrl(url: string): string | null {
+export function extractJobIdFromUrl(
+  url: string,
+  atsType?: string | null,
+): string | null {
   try {
     const parsed = new URL(url);
     const fromQuery = parsed.searchParams.get("jobId");
     if (fromQuery) return fromQuery;
     if (parsed.hash.startsWith("#jobId=")) {
       return parsed.hash.slice("#jobId=".length);
+    }
+    if (atsType === "greenhouse") {
+      const m = parsed.pathname.match(/\/jobs\/(\d+)/);
+      if (m?.[1]) return m[1];
+    }
+    if (atsType === "lever") {
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments.length >= 2) {
+        const last = segments[segments.length - 1];
+        if (last === "apply" && segments.length >= 3) {
+          return segments[segments.length - 2];
+        }
+        if (/^[a-f0-9-]{20,}$/i.test(last)) return last;
+      }
     }
     return null;
   } catch {
@@ -207,7 +224,7 @@ export function extractConfirmationId(): string | null {
 export async function runDoFill(): Promise<void> {
   const url = window.location.href;
   const atsType = detectAtsByUrl(url);
-  const jobId = extractJobIdFromUrl(url);
+  const jobId = extractJobIdFromUrl(url, atsType);
   const customQuestions = _extractCustomQuestions(atsType);
   ensurePanelInjected();
 
@@ -648,7 +665,7 @@ async function main() {
 
   const blocker = detectBlocker();
   if (blocker.blocked) {
-    const jobId = extractJobIdFromUrl(url);
+    const jobId = extractJobIdFromUrl(url, atsType);
     reportResult(jobId, "skipped", { reason: blocker.reason });
     updatePanel(
       `<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">${escapeHtml(blocker.reason ?? "Blocked")} \u2014 skipping.</div>`,
