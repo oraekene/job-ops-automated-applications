@@ -256,8 +256,12 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (typeof tabId === "number") {
-      dispatching.delete(jobId);
-      chromeTabs.remove(tabId).catch(() => {});
+      if (dispatching.has(jobId)) {
+        dispatching.delete(jobId);
+        chromeTabs.remove(tabId).catch(() => {});
+      } else {
+        dispatching.delete(jobId);
+      }
     }
 
     return true;

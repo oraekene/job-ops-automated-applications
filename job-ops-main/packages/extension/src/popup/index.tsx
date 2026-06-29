@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { JobOpsApi } from "../lib/jobops-api";
 import { getSettings, setSettings } from "../lib/storage";
-
-const API_BASE = "http://localhost:3001";
-const api = new JobOpsApi(API_BASE);
 
 interface QueueStatus {
   pending: number;
   submittedToday: number;
+}
+
+async function fetchQueueStatus(
+  serverUrl: string,
+): Promise<{ counts: QueueStatus }> {
+  const res = await fetch(`${serverUrl}/api/applications/queue/status`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  const body = await res.json();
+  if (!body.ok)
+    throw new Error(body.error?.message || "Request failed");
+  return body.data;
 }
 
 function Popup() {
@@ -18,10 +26,12 @@ function Popup() {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [serverOnline, setServerOnline] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const serverUrlRef = useRef(serverUrl);
 
   useEffect(() => {
     getSettings().then((s) => {
       setServerUrl(s.serverUrl);
+      serverUrlRef.current = s.serverUrl;
       setAutoFill(s.autoFill);
     });
     chrome.storage.local.get("autoApply.enabled", (data) => {
@@ -33,7 +43,7 @@ function Popup() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await api.getQueueStatus();
+      const res = await fetchQueueStatus(serverUrlRef.current);
       setQueueStatus({
         pending: res.counts.pending,
         submittedToday: res.counts.submittedToday,
@@ -54,6 +64,7 @@ function Popup() {
   }, [fetchStatus]);
 
   const save = async () => {
+    serverUrlRef.current = serverUrl;
     await setSettings({ serverUrl, autoFill });
   };
 
