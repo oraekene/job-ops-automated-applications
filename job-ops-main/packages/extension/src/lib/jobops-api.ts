@@ -105,7 +105,7 @@ export class JobOpsApi {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const FETCH_TIMEOUT = 5000;
+    const FETCH_TIMEOUT = 300_000;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
