@@ -9,6 +9,7 @@ import { and, eq, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "../db";
 import { applicationRepository } from "../repositories/applications";
 import {
+  createJob,
   findAutoApplicableJobs,
   getJobById,
   getJobByUrl,
@@ -148,8 +149,10 @@ export const applicationService = {
     jobId: string,
     atsType: string,
     customQuestions: string[],
+    jobMeta?: { jobTitle?: string; employer?: string; description?: string },
   ): Promise<PayloadResult> {
     const profile = await loadProfileOrThrow(jobId);
+    await ensureJobExists(jobId, atsType, jobMeta);
     const fields = await buildPayloadFields(profile);
     // US-034: generate screening answers first so the cover letter can be
     // cross-referenced against them (no contradictions on duration claims).
@@ -435,6 +438,43 @@ async function findJobByUrl(url: string) {
   if (normalized === url) return null;
 
   return getJobByUrl(normalized);
+}
+
+async function ensureJobExists(
+  jobId: string,
+  atsType: string,
+  jobMeta?: { jobTitle?: string; employer?: string; description?: string },
+): Promise<void> {
+  const existing = await getJobById(jobId);
+  if (existing) return;
+
+  if (!jobMeta?.jobTitle && !jobMeta?.employer) {
+    throw unprocessableEntity(
+      `Job ${jobId} not found and no metadata provided to create it`,
+    );
+  }
+
+  const employerSlug = (jobMeta.employer ?? "unknown")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+  const jobUrl =
+    atsType === "greenhouse"
+      ? `https://job-boards.greenhouse.io/${employerSlug}/jobs/${jobId}`
+      : atsType === "lever"
+        ? `https://jobs.lever.co/${employerSlug}/${jobId}`
+        : `https://unknown-board.example.com/jobs/${jobId}`;
+
+  await createJob({
+    id: jobId,
+    source: "manual",
+    title: jobMeta.jobTitle ?? "Unknown Job",
+    employer: jobMeta.employer ?? "Unknown Employer",
+    jobUrl,
+    jobDescription: jobMeta.description ?? "",
+    autoApplicable: true,
+  });
+
+  logger.info("Created job from extension-provided metadata", { jobId });
 }
 
 async function loadProfileOrNull(): Promise<ResumeProfile | null> {

@@ -23,13 +23,14 @@ applicationRouter.get(
 applicationRouter.post(
   "/payload",
   asyncRoute(async (req: Request, res: Response) => {
-    const { jobId, atsType, customQuestions } = req.body;
+    const { jobId, atsType, customQuestions, jobMeta } = req.body;
     if (!jobId || !atsType) throw badRequest("Missing jobId or atsType");
 
     const result = await applicationService.buildPayload(
       jobId,
       atsType,
       customQuestions || [],
+      jobMeta,
     );
     ok(res, result);
   }),

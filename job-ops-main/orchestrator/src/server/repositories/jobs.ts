@@ -454,7 +454,7 @@ export async function getAllJobUrls(): Promise<string[]> {
 }
 
 async function insertJob(input: CreateJobInput): Promise<Job> {
-  const id = randomUUID();
+  const id = input.id ?? randomUUID();
   const now = new Date().toISOString();
   const tenantId = getActiveTenantId();
 

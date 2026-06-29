@@ -165,10 +165,11 @@ export class JobOpsApi {
     jobId: string,
     atsType: string,
     customQuestions: string[],
+    jobMeta?: { jobTitle?: string; employer?: string; description?: string },
   ): Promise<PayloadResponse> {
     return this.request<PayloadResponse>("/api/applications/payload", {
       method: "POST",
-      body: JSON.stringify({ jobId, atsType, customQuestions }),
+      body: JSON.stringify({ jobId, atsType, customQuestions, jobMeta }),
     });
   }
 

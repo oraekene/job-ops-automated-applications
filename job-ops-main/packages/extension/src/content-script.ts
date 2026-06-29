@@ -5,6 +5,11 @@ import { uploadResume } from "./drivers/shared/file-injector";
 import { detectBlocker } from "./lib/detect-blocker";
 import type { JobopsResult, PayloadResponse } from "./lib/jobops-api";
 import { ApiError, JobOpsApi, NetworkError } from "./lib/jobops-api";
+import {
+  extractEmployerName,
+  extractJobDescription,
+  extractJobTitle,
+} from "./lib/page-extractor";
 import { getSettings, type ExtensionSettings } from "./lib/storage";
 
 let api: JobOpsApi;
@@ -228,6 +233,10 @@ export async function runDoFill(): Promise<void> {
   const customQuestions = _extractCustomQuestions(atsType);
   ensurePanelInjected();
 
+  const jobTitle = extractJobTitle(atsType);
+  const employer = extractEmployerName(atsType);
+  const description = extractJobDescription(atsType);
+
   if (atsType === "unknown") {
     reportResult(jobId, "skipped", { reason: "unknown ATS" });
     updatePanel(
@@ -253,7 +262,11 @@ export async function runDoFill(): Promise<void> {
   let payload: PayloadResponse;
   try {
     const jApi = await ensureApi();
-    payload = await jApi.buildPayload(jobId, atsType, customQuestions);
+    payload = await jApi.buildPayload(jobId, atsType, customQuestions, {
+      jobTitle,
+      employer,
+      description,
+    });
   } catch (err) {
     if (err instanceof ApiError) {
       if (err.status === 404) {

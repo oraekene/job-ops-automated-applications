@@ -280,6 +280,7 @@ export type JobListItem = Pick<
 >;
 
 export interface CreateJobInput {
+  id?: string;
   source: JobSource;
   title: string;
   employer: string;
