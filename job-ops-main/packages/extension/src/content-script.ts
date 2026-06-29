@@ -663,21 +663,23 @@ async function main() {
 
   await waitForPageStability();
 
-  const blocker = detectBlocker();
-  if (blocker.blocked) {
-    const jobId = extractJobIdFromUrl(url, atsType);
-    reportResult(jobId, "skipped", { reason: blocker.reason });
-    updatePanel(
-      `<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">${escapeHtml(blocker.reason ?? "Blocked")} \u2014 skipping.</div>`,
-      "Skip",
-      "#ffebee",
-      "#c62828",
-    );
-    return;
-  }
-
   const jApi = await ensureApi();
   const serverUrl = settings?.serverUrl || "http://localhost:3001";
+
+  if (settings?.blockerDetection !== false) {
+    const blocker = detectBlocker();
+    if (blocker.blocked) {
+      const jobId = extractJobIdFromUrl(url, atsType);
+      reportResult(jobId, "skipped", { reason: blocker.reason });
+      updatePanel(
+        `<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">${escapeHtml(blocker.reason ?? "Blocked")} \u2014 skipping.</div>`,
+        "Skip",
+        "#ffebee",
+        "#c62828",
+      );
+      return;
+    }
+  }
 
   const FORCE_PANEL_TIMEOUT = 5000;
   let panelShown = false;

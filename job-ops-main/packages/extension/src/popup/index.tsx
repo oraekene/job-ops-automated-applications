@@ -22,6 +22,7 @@ async function fetchQueueStatus(
 function Popup() {
   const [serverUrl, setServerUrl] = useState("http://localhost:3001");
   const [autoFill, setAutoFill] = useState(true);
+  const [blockerDetection, setBlockerDetection] = useState(true);
   const [autoApply, setAutoApply] = useState(false);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [serverOnline, setServerOnline] = useState(true);
@@ -33,6 +34,7 @@ function Popup() {
       setServerUrl(s.serverUrl);
       serverUrlRef.current = s.serverUrl;
       setAutoFill(s.autoFill);
+      setBlockerDetection(s.blockerDetection);
     });
     chrome.storage.local.get("autoApply.enabled", (data) => {
       setAutoApply(
@@ -65,7 +67,7 @@ function Popup() {
 
   const save = async () => {
     serverUrlRef.current = serverUrl;
-    await setSettings({ serverUrl, autoFill });
+    await setSettings({ serverUrl, autoFill, blockerDetection });
   };
 
   const toggleAutoApply = (checked: boolean) => {
@@ -161,6 +163,34 @@ function Popup() {
         />
         Auto-fill on page load
       </label>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          fontSize: "13px",
+          marginBottom: blockerDetection ? "12px" : "4px",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={blockerDetection}
+          onChange={(e) => setBlockerDetection(e.target.checked)}
+        />
+        Block CAPTCHA/MFA detection
+      </label>
+      {!blockerDetection && (
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#999",
+            marginBottom: "12px",
+            paddingLeft: "24px",
+          }}
+        >
+          Fill proceeds even when CAPTCHA or MFA is detected
+        </div>
+      )}
       <button
         type="button"
         onClick={save}

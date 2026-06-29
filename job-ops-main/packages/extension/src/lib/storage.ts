@@ -2,6 +2,7 @@ export interface ExtensionSettings {
   serverUrl: string;
   autoFill: boolean;
   autoApplyEnabled: boolean;
+  blockerDetection: boolean;
 }
 
 export async function getSettings(): Promise<ExtensionSettings> {
@@ -11,6 +12,7 @@ export async function getSettings(): Promise<ExtensionSettings> {
         serverUrl: "http://localhost:3001",
         autoFill: true,
         autoApplyEnabled: false,
+        blockerDetection: true,
       },
       (items) => {
         resolve(items as ExtensionSettings);
