@@ -1,6 +1,9 @@
 import { detectAtsByUrl } from "./drivers/ats-detector";
 import { fillGreenhouseForm } from "./drivers/greenhouse";
 import { fillLeverForm } from "./drivers/lever";
+import {
+  setReactInputValue,
+} from "./drivers/shared/native-events";
 import { uploadResume } from "./drivers/shared/file-injector";
 import { detectBlocker } from "./lib/detect-blocker";
 import type { JobopsResult, PayloadResponse } from "./lib/jobops-api";
@@ -382,8 +385,18 @@ export async function runDoFill(): Promise<void> {
  */
 function findResumeUploadInput(atsType: string): HTMLInputElement | null {
   if (atsType === "greenhouse") {
-    return document.querySelector<HTMLInputElement>(
-      'input[data-qa="resume-upload-input"]',
+    return (
+      document.querySelector<HTMLInputElement>(
+        'input[data-qa="resume-upload-input"]',
+      ) ??
+      document.querySelector<HTMLInputElement>('input#resume[type="file"]') ??
+      document.querySelector<HTMLInputElement>(
+        '.file-upload input[type="file"]',
+      ) ??
+      document.querySelector<HTMLInputElement>(
+        '.application--questions input[type="file"]',
+      ) ??
+      document.querySelector<HTMLInputElement>('input[type="file"]')
     );
   }
   if (atsType === "lever") {
@@ -430,6 +443,12 @@ function _fillCustomQuestions(
       '[data-qa^="question_"]',
     );
     labelSelector = "label";
+    if (containers.length === 0) {
+      containers = document.querySelectorAll<HTMLElement>(
+        '.application--questions .field-wrapper:not([data-qa])',
+      );
+      labelSelector = ".label";
+    }
   } else if (atsType === "lever") {
     containers = document.querySelectorAll<HTMLElement>(
       "li.application-question.custom-question",
@@ -495,6 +514,7 @@ function fillFormByLabels(data: Record<string, string>): { filled: number } {
     company: "current_company",
     "current company": "current_company",
     "cover letter": "cover_letter",
+    "additional information": "cover_letter",
     salary: "salary",
     "salary expectations": "salary",
     website: "website_url",
@@ -584,8 +604,17 @@ function findLabel(el: HTMLElement): string | null {
 
 function _extractCustomQuestions(atsType: string): string[] {
   if (atsType === "greenhouse") {
-    return Array.from(
+    const standardQuestions = Array.from(
       document.querySelectorAll<HTMLElement>('[data-qa^="question_"] label'),
+    )
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean) as string[];
+    if (standardQuestions.length > 0) return standardQuestions;
+
+    return Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '.application--questions .field-wrapper:not([data-qa]) label.label',
+      ),
     )
       .map((el) => el.textContent?.trim())
       .filter(Boolean) as string[];
