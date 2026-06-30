@@ -1,5 +1,6 @@
 import { badRequest } from "@infra/errors";
 import { asyncRoute, ok } from "@infra/http";
+import { applicationRepository } from "@server/repositories/applications";
 import {
   applicationService,
   QUEUE_DEFAULT_LIMIT,
@@ -7,6 +8,14 @@ import {
 import { type Request, type Response, Router } from "express";
 
 export const applicationRouter = Router();
+
+applicationRouter.get(
+  "/incomplete",
+  asyncRoute(async (_req: Request, res: Response) => {
+    const apps = applicationRepository.findIncomplete();
+    ok(res, { applications: apps });
+  }),
+);
 
 applicationRouter.get(
   "/prep",
@@ -86,8 +95,10 @@ applicationRouter.post(
     if (!jobId || !atsType || !outcome) {
       throw badRequest("Missing jobId, atsType, or outcome");
     }
-    if (!["submitted", "skipped", "failed"].includes(outcome)) {
-      throw badRequest("outcome must be 'submitted' | 'skipped' | 'failed'");
+    if (!["submitted", "skipped", "failed", "incomplete"].includes(outcome)) {
+      throw badRequest(
+        "outcome must be 'submitted' | 'skipped' | 'failed' | 'incomplete'",
+      );
     }
 
     const result = await applicationService.reportQueueResult({

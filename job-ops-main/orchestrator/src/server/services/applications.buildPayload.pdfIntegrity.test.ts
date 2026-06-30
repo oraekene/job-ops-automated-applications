@@ -55,7 +55,10 @@ describe.sequential("applicationService.buildPayload PDF integrity (US-033)", ()
     vi.mocked(getProfile).mockResolvedValue({
       basics: { name: "Test User", email: "test@example.com" },
     } as any);
-    vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({});
+    vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({
+      answers: {},
+      missingQuestions: [],
+    });
     vi.mocked(getEffectiveSettings).mockResolvedValue({
       autoApplicationDefaultCoverLetter: {
         value: "Default cover letter",

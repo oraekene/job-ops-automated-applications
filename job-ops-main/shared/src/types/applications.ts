@@ -5,6 +5,7 @@ export const APPLICATION_STATUSES = [
   "submitted",
   "failed",
   "skipped",
+  "incomplete",
 ] as const;
 
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];

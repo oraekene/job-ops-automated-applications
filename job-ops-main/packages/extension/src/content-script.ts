@@ -347,6 +347,21 @@ export async function runDoFill(): Promise<void> {
     console.log("JobOps: populateAtsForm threw", err);
   }
 
+  const missingQuestions = payload.missingQuestions;
+  if (missingQuestions && missingQuestions.length > 0) {
+    highlightMissingFields(atsType, missingQuestions);
+    reportResult(jobId, "incomplete", {
+      reason: `Missing ${missingQuestions.length} question(s): ${missingQuestions.join("; ")}`,
+    });
+    updatePanel(
+      `<div style="text-align:center;font-size:13px;color:#e65100;font-weight:500;padding:8px;">Filled ${payload.screening_answers ? Object.keys(payload.screening_answers).length : 0} of ${customQuestions.length} questions. ${missingQuestions.length} highlighted field(s) need your input.</div>`,
+      "Incomplete",
+      "#fff3e0",
+      "#e65100",
+    );
+    return;
+  }
+
   const resumeInput = findResumeUploadInput(atsType);
   const uploaded = await uploadResume(
     resumeInput,
@@ -500,6 +515,61 @@ function _fillCustomQuestions(
     setter.call(target, answer);
     target.dispatchEvent(new Event("input", { bubbles: true }));
     target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+function highlightMissingFields(
+  atsType: string,
+  missingQuestions: string[],
+): void {
+  if (missingQuestions.length === 0) return;
+
+  let containers: NodeListOf<HTMLElement> | null = null;
+  let labelSelector: string | null = null;
+  if (atsType === "greenhouse") {
+    containers = document.querySelectorAll<HTMLElement>(
+      '[data-qa^="question_"]',
+    );
+    labelSelector = "label";
+    if (containers.length === 0) {
+      containers = document.querySelectorAll<HTMLElement>(
+        '.application--questions .field-wrapper:not([data-qa])',
+      );
+      labelSelector = ".label";
+    }
+  } else if (atsType === "lever") {
+    containers = document.querySelectorAll<HTMLElement>(
+      "li.application-question.custom-question",
+    );
+    labelSelector = ".application-label";
+  }
+  if (!containers || !labelSelector) return;
+
+  for (const questionText of missingQuestions) {
+    let container: HTMLElement | null = null;
+    for (const el of Array.from(containers)) {
+      const label = el.querySelector(labelSelector)?.textContent?.trim();
+      if (label === questionText) {
+        container = el;
+        break;
+      }
+    }
+    if (!container) continue;
+
+    container.style.border = "2px solid #e53935";
+    container.style.borderRadius = "4px";
+    container.style.background = "#fff5f5";
+    container.style.padding = "4px";
+
+    const target = container.querySelector<
+      HTMLInputElement | HTMLTextAreaElement
+    >('textarea, input[type="text"], select');
+    if (target) {
+      target.style.borderColor = "#e53935";
+      target.style.background = "#fff0f0";
+    }
+
+    container.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
 
@@ -746,7 +816,13 @@ async function main() {
       prep.job?.suitabilityScore,
     );
 
-    if (settings?.autoApplyEnabled) {
+    // Check sync settings first, then fall back to popup's local storage key
+    const autoApply = settings?.autoApplyEnabled || await new Promise<boolean>((resolve) => {
+      chrome.storage.local.get("autoApply.enabled", (data) => {
+        resolve(Boolean((data as Record<string, unknown>)?.["autoApply.enabled"]));
+      });
+    });
+    if (autoApply) {
       console.log("JobOps: auto-apply enabled, filling automatically");
       setTimeout(doFill, 500);
     } else if (settings?.autoFill !== false) {

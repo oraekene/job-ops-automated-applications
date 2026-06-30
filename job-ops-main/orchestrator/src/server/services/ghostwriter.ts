@@ -1426,29 +1426,31 @@ export class CoverLetterValidationError extends Error {
 
 /**
  * Generate screening answers for the supplied custom questions using the
- * existing Ghostwriter LLM machinery. Returns a `{ question: answer }` map
- * with one entry per question. Returns an empty map when there are no
- * questions.
+ * existing Ghostwriter LLM machinery. Returns `{ answers, missingQuestions }`
+ * where `answers` is a `{ question: answer }` map with one entry per
+ * successfully answered question, and `missingQuestions` lists questions
+ * the LLM could not answer after a retry. Returns empty `answers` and an
+ * empty `missingQuestions` array when there are no input questions.
  *
  * On LLM throw or JSON parse error, retries once with a repair prompt.
  * If the retry also fails, throws `ScreeningAnswersUnavailableError`.
  *
  * Validates that each question has a non-empty answer. If any are missing,
- * retries once. If the retry also has missing answers, throws
- * `ScreeningAnswersValidationError`.
+ * retries once. If the retry still has missing answers, they are returned
+ * in `missingQuestions` rather than throwing.
  *
  * @param onChunk - Optional callback invoked with each chunk of the
  *   screening answers JSON as it becomes available. The streaming is
- *   informational (the final map is still returned).
+ *   informational (the final result is still returned).
  */
 export async function generateScreeningAnswersForJob(input: {
   jobId: string;
   profile: Record<string, unknown>;
   questions: string[];
   onChunk?: (chunk: string) => void;
-}): Promise<Record<string, string>> {
+}): Promise<{ answers: Record<string, string>; missingQuestions: string[] }> {
   if (input.questions.length === 0) {
-    return {};
+    return { answers: {}, missingQuestions: [] };
   }
 
   const job = await jobsRepo.getJobById(input.jobId);
@@ -1510,13 +1512,17 @@ export async function generateScreeningAnswersForJob(input: {
     }
     answers = merged;
 
-    // Validate again after retry
+    // Validate again after retry — return partial success instead of throwing
     const stillMissing = findMissingAnswers(input.questions, answers);
     if (stillMissing.length > 0) {
-      throw new ScreeningAnswersValidationError(
-        `Screening answers incomplete after retry: missing ${stillMissing.length} question(s)`,
-        stillMissing,
+      logger.warn(
+        "Screening answers still missing after retry, returning partial",
+        {
+          jobId: input.jobId,
+          missingCount: stillMissing.length,
+        },
       );
+      return { answers, missingQuestions: stillMissing };
     }
   }
 
@@ -1528,7 +1534,7 @@ export async function generateScreeningAnswersForJob(input: {
     }
   }
 
-  return answers;
+  return { answers, missingQuestions: [] };
 }
 
 async function callLlmWithRetry(

@@ -102,7 +102,8 @@ describe.sequential("applicationService.buildPayload fields + cover letter + per
       },
     } as any);
     vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({
-      "Years of React?": "5 years",
+      answers: { "Years of React?": "5 years" },
+      missingQuestions: [],
     });
     vi.mocked(generateCoverLetterForJob).mockResolvedValue(
       "I am excited to apply for the Senior Engineer role at Acme.",

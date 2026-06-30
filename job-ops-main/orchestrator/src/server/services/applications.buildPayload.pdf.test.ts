@@ -76,7 +76,10 @@ describe.sequential("applicationService.buildPayload PDF generation (US-007)", (
     vi.mocked(getProfile).mockResolvedValue({
       basics: { name: "Ifeanyi Orae", email: "ifeanyi@example.com" },
     } as any);
-    vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({});
+    vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({
+      answers: {},
+      missingQuestions: [],
+    });
     vi.mocked(generatePdf).mockResolvedValue({
       success: true,
       pdfPath,
@@ -109,7 +112,10 @@ describe.sequential("applicationService.buildPayload PDF generation (US-007)", (
     vi.mocked(getProfile).mockResolvedValue({
       basics: { name: "Ifeanyi Orae", email: "ifeanyi@example.com" },
     } as any);
-    vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({});
+    vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({
+      answers: {},
+      missingQuestions: [],
+    });
     vi.mocked(generatePdf).mockResolvedValue({
       success: false,
       error: "Renderer exploded",

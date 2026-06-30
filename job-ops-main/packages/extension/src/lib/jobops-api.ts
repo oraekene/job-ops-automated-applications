@@ -1,7 +1,7 @@
 export interface JobopsResult {
   kind: "jobops:result";
   jobId: string;
-  outcome: "submitted" | "skipped" | "failed";
+  outcome: "submitted" | "skipped" | "failed" | "incomplete";
   reason?: string;
   confirmationId?: string;
   fieldSnapshot?: Record<string, string>;
@@ -46,6 +46,8 @@ export interface PayloadResponse {
    */
   cover_letter_stream: ReadableStream<string> | null;
   screening_answers: Record<string, string>;
+  /** Questions the LLM could not answer. Empty when all were answered. */
+  missingQuestions: string[];
   resume_pdf_base64: string;
   resume_filename: string;
 }

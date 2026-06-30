@@ -43,6 +43,21 @@ export type ApplicationRow = {
   updatedAt: string;
 };
 
+export interface IncompleteApplication {
+  id: string;
+  jobId: string;
+  atsType: string;
+  status: string;
+  errorMessage: string | null;
+  screeningAnswers: string | null;
+  customQuestions: string | null;
+  createdAt: string;
+  updatedAt: string;
+  jobTitle: string | null;
+  employer: string | null;
+  jobUrl: string | null;
+}
+
 export const applicationRepository = {
   findByJobId(jobId: string): ApplicationRow | undefined {
     return db
@@ -69,6 +84,34 @@ export const applicationRepository = {
       )
       .orderBy(desc(applications.createdAt))
       .all() as ApplicationRow[];
+  },
+
+  findIncomplete(): IncompleteApplication[] {
+    return db
+      .select({
+        id: applications.id,
+        jobId: applications.jobId,
+        atsType: applications.atsType,
+        status: applications.status,
+        errorMessage: applications.errorMessage,
+        screeningAnswers: applications.screeningAnswers,
+        customQuestions: applications.customQuestions,
+        createdAt: applications.createdAt,
+        updatedAt: applications.updatedAt,
+        jobTitle: schema.jobs.title,
+        employer: schema.jobs.employer,
+        jobUrl: schema.jobs.jobUrl,
+      })
+      .from(applications)
+      .innerJoin(schema.jobs, eq(applications.jobId, schema.jobs.id))
+      .where(
+        and(
+          eq(applications.status, "incomplete"),
+          eq(applications.tenantId, getActiveTenantId()),
+        ),
+      )
+      .orderBy(desc(applications.createdAt))
+      .all() as IncompleteApplication[];
   },
 
   create(input: CreateApplicationInput): ApplicationRow {

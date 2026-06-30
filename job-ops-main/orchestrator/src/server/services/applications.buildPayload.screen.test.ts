@@ -37,7 +37,6 @@ describe.sequential("applicationService.buildPayload screening answers (US-006)"
   let applicationService: any;
   let getProfile: any;
   let generateScreeningAnswersForJob: any;
-  let _generateCoverLetterForJob: any;
   let generatePdf: any;
   let getPdfPath: any;
 
@@ -57,8 +56,7 @@ describe.sequential("applicationService.buildPayload screening answers (US-006)"
     // Re-import mocks AFTER vi.resetModules so they match the references
     // that applications.ts picks up on its dynamic import.
     ({ getProfile } = await import("./profile"));
-    ({ generateScreeningAnswersForJob, _generateCoverLetterForJob } =
-      await import("./ghostwriter"));
+    ({ generateScreeningAnswersForJob } = await import("./ghostwriter"));
     ({ generatePdf, getPdfPath } = await import("./pdf"));
 
     // Write a real PDF file the mocked getPdfPath will return.
@@ -93,7 +91,10 @@ describe.sequential("applicationService.buildPayload screening answers (US-006)"
       basics: { name: "Ifeanyi Orae", email: "ifeanyi@example.com" },
     } as any);
     vi.mocked(generateScreeningAnswersForJob).mockResolvedValue({
-      "Years of React experience?": "5 years building production SPAs.",
+      answers: {
+        "Years of React experience?": "5 years building production SPAs.",
+      },
+      missingQuestions: [],
     });
 
     const result = await applicationService.buildPayload(job.id, "greenhouse", [

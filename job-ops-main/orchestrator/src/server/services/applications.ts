@@ -64,13 +64,13 @@ export interface PayloadResult {
   fields: Record<string, string>;
   cover_letter: string;
   /**
-   * US-034: informational stream of the cover letter text emitted as it
-   * was generated. Currently always `null` (the consumer can read the
-   * final string from `cover_letter`); reserved for future real LLM
-   * streaming integration.
+   * US-034: informational stream of the cover letter text emitted during
+   * generation. Currently always `null`; consumers use `cover_letter`.
    */
   cover_letter_stream: ReadableStream<string> | null;
   screening_answers: Record<string, string>;
+  /** Questions the LLM could not answer. Empty when all were answered. */
+  missingQuestions: string[];
   resume_pdf_base64: string;
   resume_filename: string;
   atsType: string;
@@ -88,7 +88,11 @@ export interface ConfirmInput {
   screenshotBase64?: string;
 }
 
-export type QueueResultOutcome = "submitted" | "skipped" | "failed";
+export type QueueResultOutcome =
+  | "submitted"
+  | "skipped"
+  | "failed"
+  | "incomplete";
 
 export interface QueueResultInput {
   jobId: string;
@@ -156,10 +160,8 @@ export const applicationService = {
     const fields = await buildPayloadFields(profile);
     // US-034: generate screening answers first so the cover letter can be
     // cross-referenced against them (no contradictions on duration claims).
-    const screening_answers = await buildScreeningAnswers(
-      jobId,
-      customQuestions,
-    );
+    const { answers: screening_answers, missingQuestions } =
+      await buildScreeningAnswers(jobId, customQuestions);
     const cover_letter = await buildCoverLetter(
       jobId,
       profile,
@@ -180,6 +182,7 @@ export const applicationService = {
       cover_letter,
       cover_letter_stream: null,
       screening_answers,
+      missingQuestions,
       resume_pdf_base64,
       resume_filename,
       atsType,
@@ -492,12 +495,11 @@ async function loadProfileOrNull(): Promise<ResumeProfile | null> {
 async function buildScreeningAnswers(
   jobId: string,
   customQuestions: string[],
-): Promise<Record<string, string>> {
+): Promise<{ answers: Record<string, string>; missingQuestions: string[] }> {
   if (customQuestions.length === 0) {
-    return {};
+    return { answers: {}, missingQuestions: [] };
   }
-  const { ScreeningAnswersUnavailableError, ScreeningAnswersValidationError } =
-    await import("./ghostwriter");
+  const { ScreeningAnswersUnavailableError } = await import("./ghostwriter");
   try {
     const profile = await getProfile();
     const profileRecord =
@@ -510,19 +512,26 @@ async function buildScreeningAnswers(
       questions: customQuestions,
     });
   } catch (error) {
-    if (
-      error instanceof ScreeningAnswersUnavailableError ||
-      error instanceof ScreeningAnswersValidationError
-    ) {
-      throw unprocessableEntity(
-        `Screening answers unavailable for ${customQuestions.length} question(s): ${error.message}`,
+    if (error instanceof ScreeningAnswersUnavailableError) {
+      logger.warn(
+        "buildScreeningAnswers: LLM unavailable, marking all questions as missing",
+        {
+          jobId,
+        },
       );
+      return {
+        answers: {},
+        missingQuestions: customQuestions,
+      };
     }
     logger.warn("buildPayload: screening answer generation failed", {
       jobId,
       error,
     });
-    return Object.fromEntries(customQuestions.map((q) => [q, ""]));
+    return {
+      answers: Object.fromEntries(customQuestions.map((q) => [q, ""])),
+      missingQuestions: [],
+    };
   }
 }
 

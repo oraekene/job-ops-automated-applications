@@ -7,6 +7,17 @@ interface QueueStatus {
   submittedToday: number;
 }
 
+interface IncompleteApp {
+  id: string;
+  jobId: string;
+  atsType: string;
+  errorMessage: string | null;
+  createdAt: string;
+  jobTitle: string | null;
+  employer: string | null;
+  jobUrl: string | null;
+}
+
 async function fetchQueueStatus(
   serverUrl: string,
 ): Promise<{ counts: QueueStatus }> {
@@ -19,6 +30,19 @@ async function fetchQueueStatus(
   return body.data;
 }
 
+async function fetchIncompleteApps(
+  serverUrl: string,
+): Promise<IncompleteApp[]> {
+  try {
+    const res = await fetch(`${serverUrl}/api/applications/incomplete`);
+    const body = await res.json();
+    if (!body.ok) return [];
+    return (body.data?.applications as IncompleteApp[]) || [];
+  } catch {
+    return [];
+  }
+}
+
 function Popup() {
   const [serverUrl, setServerUrl] = useState("http://localhost:3001");
   const [autoFill, setAutoFill] = useState(true);
@@ -26,8 +50,23 @@ function Popup() {
   const [autoApply, setAutoApply] = useState(false);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [serverOnline, setServerOnline] = useState(true);
+  const [incompleteApps, setIncompleteApps] = useState<IncompleteApp[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const serverUrlRef = useRef(serverUrl);
+
+  const loadAutoApply = useCallback(async () => {
+    // Try sync storage first, fall back to local
+    const sync = await getSettings();
+    const syncVal = sync.autoApplyEnabled;
+    if (syncVal) {
+      setAutoApply(true);
+      return;
+    }
+    const local = await new Promise<Record<string, unknown>>((resolve) =>
+      chrome.storage.local.get("autoApply.enabled", resolve),
+    );
+    setAutoApply(Boolean(local["autoApply.enabled"]));
+  }, []);
 
   useEffect(() => {
     getSettings().then((s) => {
@@ -36,12 +75,8 @@ function Popup() {
       setAutoFill(s.autoFill);
       setBlockerDetection(s.blockerDetection);
     });
-    chrome.storage.local.get("autoApply.enabled", (data) => {
-      setAutoApply(
-        Boolean((data as Record<string, unknown>)["autoApply.enabled"]),
-      );
-    });
-  }, []);
+    loadAutoApply();
+  }, [loadAutoApply]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -57,30 +92,42 @@ function Popup() {
     }
   }, []);
 
+  const fetchIncomplete = useCallback(async () => {
+    const apps = await fetchIncompleteApps(serverUrlRef.current);
+    setIncompleteApps(apps);
+  }, []);
+
   useEffect(() => {
     fetchStatus();
-    intervalRef.current = setInterval(fetchStatus, 10_000);
+    fetchIncomplete();
+    intervalRef.current = setInterval(() => {
+      fetchStatus();
+      fetchIncomplete();
+    }, 10_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchStatus]);
+  }, [fetchStatus, fetchIncomplete]);
 
   const save = async () => {
     serverUrlRef.current = serverUrl;
     await setSettings({ serverUrl, autoFill, blockerDetection });
   };
 
-  const toggleAutoApply = (checked: boolean) => {
+  const toggleAutoApply = async (checked: boolean) => {
     setAutoApply(checked);
     chrome.storage.local.set({ "autoApply.enabled": checked });
+    await setSettings({ autoApplyEnabled: checked });
   };
 
   return (
     <div
       style={{
-        width: "280px",
+        width: "300px",
         padding: "16px",
         fontFamily: "-apple-system, sans-serif",
+        maxHeight: "500px",
+        overflowY: "auto",
       }}
     >
       <h2 style={{ fontSize: "16px", margin: "0 0 12px" }}>JobOps Copilot</h2>
@@ -91,7 +138,7 @@ function Popup() {
           alignItems: "center",
           gap: "8px",
           fontSize: "13px",
-          marginBottom: "12px",
+          marginBottom: "8px",
           padding: "8px",
           background: autoApply ? "#e8f5e9" : "#f5f5f5",
           borderRadius: "6px",
@@ -111,7 +158,7 @@ function Popup() {
           style={{
             fontSize: "12px",
             color: "#666",
-            marginBottom: "12px",
+            marginBottom: "8px",
             padding: "6px 8px",
             background: "#f5f5f5",
             borderRadius: "4px",
@@ -125,6 +172,52 @@ function Popup() {
           ) : (
             <span style={{ color: "#c62828" }}>Server offline</span>
           )}
+        </div>
+      )}
+
+      {autoApply && incompleteApps.length > 0 && (
+        <div
+          style={{
+            fontSize: "12px",
+            marginBottom: "8px",
+            padding: "6px 8px",
+            background: "#fff3e0",
+            borderRadius: "4px",
+            border: "1px solid #ffe0b2",
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: "4px", color: "#e65100" }}>
+            Needs manual completion ({incompleteApps.length})
+          </div>
+          {incompleteApps.map((app) => (
+            <div
+              key={app.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "4px 0",
+                borderTop: "1px solid #ffe0b2",
+                fontSize: "11px",
+              }}
+            >
+              <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {app.jobTitle || "Unknown"} at {app.employer || "Unknown"}
+              </div>
+              {app.jobUrl && (
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    chrome.tabs.create({ url: app.jobUrl! });
+                  }}
+                  style={{ color: "#1565c0", textDecoration: "none", marginLeft: "8px", flexShrink: 0 }}
+                >
+                  Open
+                </a>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -145,6 +238,7 @@ function Popup() {
           border: "1px solid #ddd",
           borderRadius: "6px",
           fontSize: "13px",
+          boxSizing: "border-box",
         }}
       />
       <label
