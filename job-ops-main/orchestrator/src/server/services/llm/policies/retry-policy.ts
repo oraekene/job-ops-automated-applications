@@ -13,5 +13,7 @@ export function shouldRetryAttempt(args: {
 }
 
 export function getRetryDelayMs(baseDelayMs: number, attempt: number): number {
-  return baseDelayMs * attempt;
+  const delay = baseDelayMs * Math.pow(2, attempt);
+  const jitter = Math.random() * 0.5 * delay;
+  return Math.round(delay + jitter);
 }

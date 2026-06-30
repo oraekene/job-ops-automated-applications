@@ -1,6 +1,7 @@
 export interface JobopsResult {
   kind: "jobops:result";
   jobId: string;
+  atsType: string;
   outcome: "submitted" | "skipped" | "failed" | "incomplete";
   reason?: string;
   confirmationId?: string;

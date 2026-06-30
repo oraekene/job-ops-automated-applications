@@ -188,7 +188,8 @@ export function extractJobIdFromUrl(
 
 export function reportResult(
   jobId: string | null,
-  outcome: "submitted" | "skipped" | "failed",
+  atsType: string,
+  outcome: "submitted" | "skipped" | "failed" | "incomplete",
   extras: {
     reason?: string;
     confirmationId?: string;
@@ -201,6 +202,7 @@ export function reportResult(
     const result: JobopsResult = {
       kind: "jobops:result",
       jobId: jobId ?? "unknown",
+      atsType,
       outcome,
       ...extras,
     };
@@ -241,7 +243,7 @@ export async function runDoFill(): Promise<void> {
   const description = extractJobDescription(atsType);
 
   if (atsType === "unknown") {
-    reportResult(jobId, "skipped", { reason: "unknown ATS" });
+    reportResult(jobId, atsType, "skipped", { reason: "unknown ATS" });
     updatePanel(
       '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Unknown ATS \u2014 cannot fill.</div>',
       "Skip",
@@ -252,7 +254,7 @@ export async function runDoFill(): Promise<void> {
   }
 
   if (!jobId) {
-    reportResult(jobId, "skipped", { reason: "missing jobId" });
+    reportResult(jobId, atsType, "skipped", { reason: "missing jobId" });
     updatePanel(
       '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Missing jobId \u2014 cannot fill.</div>',
       "Skip",
@@ -273,7 +275,7 @@ export async function runDoFill(): Promise<void> {
   } catch (err) {
     if (err instanceof ApiError) {
       if (err.status === 404) {
-        reportResult(jobId, "skipped", { reason: "profile missing" });
+        reportResult(jobId, atsType, "skipped", { reason: "profile missing" });
         updatePanel(
           '<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">Complete onboarding first \u2014 profile not found.</div>',
           "Skip",
@@ -284,7 +286,7 @@ export async function runDoFill(): Promise<void> {
       }
       if (err.status === 422) {
         const reason = err.message || "unprocessable";
-        reportResult(jobId, "skipped", { reason });
+        reportResult(jobId, atsType, "skipped", { reason });
         updatePanel(
           `<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: ${escapeHtml(reason)}</div>`,
           "Skip",
@@ -294,7 +296,7 @@ export async function runDoFill(): Promise<void> {
         return;
       }
       if (err.status >= 500) {
-        reportResult(jobId, "skipped", { reason: "server error" });
+        reportResult(jobId, atsType, "skipped", { reason: "server error" });
         updatePanel(
           '<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: server error</div>',
           "Skip",
@@ -303,7 +305,7 @@ export async function runDoFill(): Promise<void> {
         );
         return;
       }
-      reportResult(jobId, "skipped", {
+      reportResult(jobId, atsType, "skipped", {
         reason: err.message,
         error: { code: err.code, message: err.message },
       });
@@ -316,7 +318,7 @@ export async function runDoFill(): Promise<void> {
       return;
     }
     if (err instanceof NetworkError) {
-      reportResult(jobId, "skipped", { reason: "network error" });
+      reportResult(jobId, atsType, "skipped", { reason: "network error" });
       updatePanel(
         '<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">Skipped: network error</div>',
         "Skip",
@@ -325,7 +327,7 @@ export async function runDoFill(): Promise<void> {
       );
       return;
     }
-    reportResult(jobId, "failed", {
+    reportResult(jobId, atsType, "failed", {
       reason: "unexpected error",
       error: {
         code: "UNEXPECTED",
@@ -350,7 +352,7 @@ export async function runDoFill(): Promise<void> {
   const missingQuestions = payload.missingQuestions;
   if (missingQuestions && missingQuestions.length > 0) {
     highlightMissingFields(atsType, missingQuestions);
-    reportResult(jobId, "incomplete", {
+    reportResult(jobId, atsType, "incomplete", {
       reason: `Missing ${missingQuestions.length} question(s): ${missingQuestions.join("; ")}`,
     });
     updatePanel(
@@ -369,7 +371,7 @@ export async function runDoFill(): Promise<void> {
     payload.resume_filename,
   );
   if (!uploaded) {
-    reportResult(jobId, "skipped", { reason: "no resume upload input" });
+    reportResult(jobId, atsType, "skipped", { reason: "no resume upload input" });
     updatePanel(
       '<div style="text-align:center;color:#e65100;font-weight:500;padding:8px;">No resume upload field on this form \u2014 skipped.</div>',
       "Skip",
@@ -379,7 +381,7 @@ export async function runDoFill(): Promise<void> {
     return;
   }
 
-  reportResult(jobId, "submitted", {
+  reportResult(jobId, atsType, "submitted", {
     confirmationId: extractConfirmationId() ?? undefined,
     fieldSnapshot: payload.fields,
     answersSnapshot: payload.screening_answers,
@@ -782,7 +784,7 @@ async function main() {
     const blocker = detectBlocker();
     if (blocker.blocked) {
       const jobId = extractJobIdFromUrl(url, atsType);
-      reportResult(jobId, "skipped", { reason: blocker.reason });
+      reportResult(jobId, atsType, "skipped", { reason: blocker.reason });
       updatePanel(
         `<div style="text-align:center;color:#c62828;font-weight:500;padding:8px;">${escapeHtml(blocker.reason ?? "Blocked")} \u2014 skipping.</div>`,
         "Skip",

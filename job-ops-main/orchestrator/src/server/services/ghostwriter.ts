@@ -1557,6 +1557,8 @@ async function callLlmWithRetry(
       ],
       jsonSchema: SCREENING_ANSWERS_SCHEMA,
       jobId,
+      maxRetries: 3,
+      retryDelayMs: 1000,
     });
   } catch (error) {
     logger.warn("Screening answer LLM call threw, retrying once", {
@@ -1576,6 +1578,8 @@ async function callLlmWithRetry(
         ],
         jsonSchema: SCREENING_ANSWERS_SCHEMA,
         jobId,
+        maxRetries: 3,
+        retryDelayMs: 1000,
       });
       if (!retryResult.success) {
         throw new ScreeningAnswersUnavailableError(
@@ -1611,6 +1615,8 @@ async function callLlmWithRetry(
         ],
         jsonSchema: SCREENING_ANSWERS_SCHEMA,
         jobId,
+        maxRetries: 3,
+        retryDelayMs: 1000,
       },
     );
     if (!retryResult.success) {
@@ -1801,6 +1807,8 @@ async function callCoverLetterLlm(
     ],
     jsonSchema: COVER_LETTER_SCHEMA,
     jobId,
+    maxRetries: 3,
+    retryDelayMs: 1000,
   });
   if (!result.success) {
     logger.warn("Cover letter LLM call returned failure", {

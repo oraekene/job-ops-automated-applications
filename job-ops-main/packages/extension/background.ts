@@ -77,6 +77,7 @@ async function dispatchJob(job: QueueItem): Promise<void> {
           reportWithRetry({
             kind: "jobops:result",
             jobId: job.id,
+            atsType,
             outcome: "failed",
             reason: "timeout",
           }),

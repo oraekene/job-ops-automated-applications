@@ -184,7 +184,7 @@ const migrations = [
     tenant_id TEXT NOT NULL DEFAULT 'tenant_default',
     job_id TEXT NOT NULL,
     ats_type TEXT NOT NULL CHECK(ats_type IN ('greenhouse', 'lever')),
-    status TEXT NOT NULL DEFAULT 'preparing' CHECK(status IN ('preparing', 'ready_for_review', 'approved', 'submitted', 'failed', 'skipped')),
+    status TEXT NOT NULL DEFAULT 'preparing' CHECK(status IN ('preparing', 'ready_for_review', 'approved', 'submitted', 'failed', 'skipped', 'incomplete')),
     field_payload TEXT,
     screening_answers TEXT,
     custom_questions TEXT,
@@ -977,7 +977,37 @@ const migrations = [
        WHERE se.application_id = jobs.id
        ORDER BY se.occurred_at DESC, se.id DESC
        LIMIT 1
-     ), 'applied') = 'closed'`,
+      ), 'applied') = 'closed'`,
+
+  // Ensure applications status supports "incomplete" for existing databases.
+  `CREATE TABLE IF NOT EXISTS applications_new (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant_default',
+    job_id TEXT NOT NULL,
+    ats_type TEXT NOT NULL CHECK(ats_type IN ('greenhouse', 'lever')),
+    status TEXT NOT NULL DEFAULT 'preparing' CHECK(status IN ('preparing', 'ready_for_review', 'approved', 'submitted', 'failed', 'skipped', 'incomplete')),
+    field_payload TEXT,
+    screening_answers TEXT,
+    custom_questions TEXT,
+    confirmation_id TEXT,
+    submitted_at TEXT,
+    screenshot_path TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+  )`,
+  `INSERT OR REPLACE INTO applications_new (
+    id, tenant_id, job_id, ats_type, status, field_payload, screening_answers, custom_questions,
+    confirmation_id, submitted_at, screenshot_path, error_message, created_at, updated_at
+  )
+  SELECT
+    id, COALESCE(tenant_id, 'tenant_default'), job_id, ats_type, status, field_payload, screening_answers,
+    custom_questions, confirmation_id, submitted_at, screenshot_path, error_message, created_at, updated_at
+  FROM applications`,
+  `DROP TABLE IF EXISTS applications`,
+  `ALTER TABLE applications_new RENAME TO applications`,
 ];
 
 console.log("🔧 Running database migrations...");

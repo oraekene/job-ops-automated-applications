@@ -111,9 +111,18 @@ export function fillGreenhouseForm(payload: GreenHousePayload): {
   });
 
   if (payload.resume_pdf_base64 && payload.resume_filename) {
-    const uploadInput = document.querySelector<HTMLInputElement>(
-      '[data-qa="resume-upload-input"]',
-    );
+    const uploadInput =
+      document.querySelector<HTMLInputElement>(
+        'input[data-qa="resume-upload-input"]',
+      ) ??
+      document.querySelector<HTMLInputElement>('input#resume[type="file"]') ??
+      document.querySelector<HTMLInputElement>(
+        '.file-upload input[type="file"]',
+      ) ??
+      document.querySelector<HTMLInputElement>(
+        '.application--questions input[type="file"]',
+      ) ??
+      document.querySelector<HTMLInputElement>('input[type="file"]');
     if (uploadInput) {
       try {
         const byteString = atob(payload.resume_pdf_base64);
